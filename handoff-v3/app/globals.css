@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/* ── Darkroom Noir Theme ──────────────────────────────────────────────────── */
+
+@theme {
+  /* Surface hierarchy — tonal layering */
+  --color-background: #0e0e0e;
+  --color-surface: #0e0e0e;
+  --color-surface-dim: #0e0e0e;
+  --color-surface-lowest: #000000;
+  --color-surface-low: #131313;
+  --color-surface-container: #191a1a;
+  --color-surface-high: #1f2020;
+  --color-surface-highest: #252626;
+  --color-surface-bright: #2c2c2c;
+  --color-surface-variant: #252626;
+
+  /* Text on surfaces */
+  --color-on-surface: #e7e5e4;
+  --color-on-surface-variant: #acabaa;
+  --color-on-background: #e7e5e4;
+
+  /* Outlines */
+  --color-outline: #8a8a8a;
+  --color-outline-variant: #484848;
+
+  /* Primary — Gold (Hero) */
+  --color-primary: #f0c040;
+  --color-primary-dim: #e1b233;
+  --color-on-primary: #523d00;
+  --color-primary-container: #5a4400;
+
+  /* Secondary — Green (Select) */
+  --color-secondary: #57b065;
+  --color-secondary-dim: #57b065;
+  --color-on-secondary: #00270a;
+
+  /* Tertiary — Blue (Technical) */
+  --color-tertiary: #90c9ff;
+  --color-tertiary-dim: #74aee2;
+
+  /* Error — Red (Style & Story / Cut) */
+  --color-error: #ee7d77;
+  --color-error-dim: #bb5551;
+  --color-on-error-container: #ff9993;
+
+  /* Score dimension colors */
+  --color-score-impact: #e8a035;
+  --color-score-composition: #6ea4d4;
+  --color-score-technical: #8b5cf6;
+  --color-score-style: #06b6d4;
+
+  /* Rating colors */
+  --color-rating-hero: #f0c040;
+  --color-rating-select: #57b065;
+  --color-rating-maybe: #a0a0a0;
+  --color-rating-cut: #c75050;
+
+  /* Fonts */
+  --font-headline: 'Noto Serif', Georgia, serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-label: 'Space Grotesk', monospace;
+
+  /* Layout tokens */
+  --panel-width: 420px;
+
+  /* Border radius — 0px everywhere (Darkroom Noir) */
+  --radius: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+}
+
+/* ── Base Styles ──────────────────────────────────────────────────────────── */
+
+@layer base {
+  html, body {
+    background-color: var(--color-background);
+    color: var(--color-on-surface);
+    font-family: var(--font-body);
+  }
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  font-size: 20px;
+}
+
+/* ── Utility classes ──────────────────────────────────────────────────────── */
+
+.serif-italic {
+  font-family: var(--font-headline);
+  font-style: italic;
+}
+
+.mono-label {
+  font-family: var(--font-label);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.glass-loupe {
+  background: rgba(37, 38, 38, 0.7);
+  backdrop-filter: blur(16px);
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); }
+
+/* ── Focus ────────────────────────────────────────────────────────────────── */
+
+[tabindex="0"]:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(240,192,64,0.6);
+  outline-offset: 2px;
+}
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+/* Selection color */
+::selection {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
