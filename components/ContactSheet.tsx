@@ -6,6 +6,7 @@ import {
   ExperienceLevel, CompareResponse, SessionSummary,
 } from "@/lib/types";
 import { runCull, runDeepReview, runCompare } from "@/lib/api";
+import { runHarness, computeHarnessSummary, downloadHarnessReport } from "@/lib/harness";
 import { resizeImage, makeThumb } from "@/lib/resize";
 import { isRawFile, isHeicFile } from "@/lib/raw-preview";
 import {
@@ -58,6 +59,8 @@ export default function ContactSheet() {
   const [progressMsg, setProgressMsg] = useState("");
   const [progressPct, setProgressPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [harnessRunning, setHarnessRunning] = useState(false);
+  const [harnessProgress, setHarnessProgress] = useState("");
   const [sessions, setSessions] = useState<SessionSummary[]>(() => loadSessionIndex());
   const sessionIdRef = useRef(crypto.randomUUID());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -619,6 +622,35 @@ export default function ContactSheet() {
                 >
                   <span className="material-symbols-outlined text-[16px]">download</span>
                   EXPORT
+                </button>
+              )}
+              {/* Dev: Variance Harness */}
+              {config && photos.length > 0 && config.provider === "anthropic" && (
+                <button
+                  onClick={async () => {
+                    if (harnessRunning) return;
+                    setHarnessRunning(true);
+                    setHarnessProgress("Starting harness…");
+                    setError(null);
+                    try {
+                      const report = await runHarness(photos, config, (done, total, name) => {
+                        setHarnessProgress(name ? `Harness ${done + 1}/${total} — ${name}` : `Harness complete`);
+                      });
+                      const summary = computeHarnessSummary(report);
+                      downloadHarnessReport(report, summary);
+                    } catch (err: any) {
+                      setError(err.message || "Harness failed");
+                    } finally {
+                      setHarnessRunning(false);
+                      setHarnessProgress("");
+                    }
+                  }}
+                  disabled={harnessRunning}
+                  title={`Run variance harness: ${photos.length} photos × 5 runs × 2 resolutions = ${photos.length * 10} API calls`}
+                  className="flex items-center gap-2 font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors px-2 py-2"
+                >
+                  <span className="material-symbols-outlined text-[16px]">science</span>
+                  {harnessRunning ? harnessProgress : "HARNESS"}
                 </button>
               )}
               <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-tighter">
