@@ -6,6 +6,7 @@ import {
   ExperienceLevel, CompareResponse, SessionSummary,
 } from "@/lib/types";
 import { runCull, runDeepReview, runCompare } from "@/lib/api";
+import { resolveTier, canProcessPhotos, incrementFreeUsage, getFreeUsage } from "@/lib/tier";
 import { runHarness, computeHarnessSummary, downloadHarnessReport } from "@/lib/harness";
 import { resizeImage, makeThumb } from "@/lib/resize";
 import { isRawFile, isHeicFile } from "@/lib/raw-preview";
@@ -138,9 +139,15 @@ export default function ContactSheet() {
   // ── Cull ────────────────────────────────────────────────────────────────
 
   const startCull = useCallback(async (photosToProcess?: Photo[]) => {
-    if (!config) return;
     const target = photosToProcess || photos;
     if (target.length === 0) return;
+
+    const tier = resolveTier(config, false);
+    const gate = canProcessPhotos(tier, target.length);
+    if (!gate.canProcess) {
+      setError(gate.reason || "Cannot process photos");
+      return;
+    }
 
     setPhase("culling");
     setError(null);
@@ -156,6 +163,7 @@ export default function ContactSheet() {
         setProgressPct(Math.round(((batch + 1) / total) * 100));
       });
       setCullResults(results);
+      if (tier === "free") incrementFreeUsage(target.length);
 
       // Auto-select HERO + SELECT for deep review
       const autoSelected = new Set<number>();
@@ -181,9 +189,15 @@ export default function ContactSheet() {
   // ── Deep review ─────────────────────────────────────────────────────────
 
   const startDeepReview = useCallback(async () => {
-    if (!config) return;
     const indices = Array.from(deepSelected).sort((a, b) => a - b);
     if (indices.length === 0) return;
+
+    const tier = resolveTier(config, false);
+    const gate = canProcessPhotos(tier, indices.length);
+    if (!gate.canProcess) {
+      setError(gate.reason || "Cannot process photos");
+      return;
+    }
 
     setPhase("reviewing");
     setError(null);
@@ -201,6 +215,7 @@ export default function ContactSheet() {
       setRecommendedSequence(seq);
       setPhase("reviewed");
       setProgressMsg("");
+      if (tier === "free") incrementFreeUsage(indices.length);
 
       // Save session
       persistSession(photos, cullResults, analyses, notes, seq, true);
@@ -222,7 +237,15 @@ export default function ContactSheet() {
   }, []);
 
   const startCompare = useCallback(async () => {
-    if (!config || compareSelected.length !== 2) return;
+    if (compareSelected.length !== 2) return;
+
+    const tier = resolveTier(config, false);
+    const gate = canProcessPhotos(tier, 2);
+    if (!gate.canProcess) {
+      setError(gate.reason || "Cannot process photos");
+      return;
+    }
+
     setShowCompare(true);
     setCompareLoading(true);
     setCompareResult(null);
@@ -428,13 +451,16 @@ export default function ContactSheet() {
 
   // ── Render ──────────────────────────────────────────────────────────────
 
-  // Provider setup gate
-  if (!config && !showSettings) {
-    return <ProviderSetup onSave={handleConfigSave} />;
-  }
+  // Provider setup — only shown when user explicitly opens settings.
+  // Free tier users can proceed without a BYOK config; the API proxy
+  // handles them server-side.
   if (showSettings) {
     return <ProviderSetup onSave={handleConfigSave} initial={config} />;
   }
+
+  // Derive tier once per render. isPro is hardcoded false pending Clerk.
+  const tier = resolveTier(config, false);
+  const freeUsage = tier === "free" ? getFreeUsage() : null;
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -684,6 +710,11 @@ export default function ContactSheet() {
               <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-tighter">
                 <span className="text-on-surface font-bold">{displayIndices.length}</span>{filterRating !== "ALL" ? `/${photos.length}` : ""} Photos
               </div>
+              {tier === "free" && freeUsage && (
+                <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">
+                  <span className="text-on-surface font-bold">{freeUsage.remaining}</span> of {freeUsage.limit} free photos remaining
+                </div>
+              )}
             </div>
           </div>
         )}
