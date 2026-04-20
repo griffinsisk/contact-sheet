@@ -7,9 +7,60 @@ import { downsizeForCull, resizeToMax } from "./resize";
 
 type ProgressFn = (message: string, batch: number, total: number) => void;
 
+type ProxyEndpoint = "cull" | "deep-review" | "compare";
+
+interface ApiCallArgs {
+  /** When null, the call is proxied through /api/{endpoint} (free/pro tiers). */
+  config: ProviderConfig | null;
+  /** Which server route to use when proxying. Ignored for direct calls. */
+  endpoint: ProxyEndpoint;
+  /** System prompt. Used on direct calls; ignored on proxy (server owns the prompt). */
+  system: string;
+  images: { base64: string; mediaType: string }[];
+  textParts: string[];
+  maxTokens: number;
+  /** Extra fields appended to the proxy request body. Ignored on direct calls. */
+  extraBody?: Record<string, unknown>;
+}
+
+/**
+ * Single dispatch point: BYOK calls hit Anthropic (or the other providers)
+ * directly via callProvider; tier-gated calls post to our own API routes
+ * where the server owns the system prompt and the shared Anthropic key.
+ */
+async function dispatchApiCall(
+  args: ApiCallArgs,
+): Promise<{ text: string; truncated: boolean }> {
+  if (args.config) {
+    return callProvider(args.config.provider, args.config.apiKey, args.config.model, {
+      system: args.system,
+      images: args.images,
+      textParts: args.textParts,
+      maxTokens: args.maxTokens,
+    });
+  }
+
+  const res = await fetch(`/api/${args.endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      images: args.images,
+      textParts: args.textParts,
+      maxTokens: args.maxTokens,
+      ...(args.extraBody ?? {}),
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Proxy ${res.status}: request failed`);
+  }
+  return res.json();
+}
+
 export async function runCull(
   photos: Photo[],
-  config: ProviderConfig,
+  config: ProviderConfig | null,
   onProgress?: ProgressFn,
 ): Promise<Record<number, CullResult>> {
   const allResults: Record<number, CullResult> = {};
@@ -33,7 +84,9 @@ export async function runCull(
       `[Photo ${i}: ${b.photo.name}${formatExifForPrompt(b.photo.exif)}]`
     );
 
-    const response = await callProvider(config.provider, config.apiKey, config.model, {
+    const response = await dispatchApiCall({
+      config,
+      endpoint: "cull",
       system: CULL_PROMPT,
       images,
       textParts,
@@ -55,7 +108,7 @@ export async function runCull(
 export async function runDeepReview(
   photos: Photo[],
   indices: number[],
-  config: ProviderConfig,
+  config: ProviderConfig | null,
   level: ExperienceLevel = "enthusiast",
   onProgress?: ProgressFn,
 ): Promise<{
@@ -73,6 +126,8 @@ export async function runDeepReview(
   let lastNotes: string | null = null;
   let lastSequence: number[] | null = null;
 
+  // For direct/BYOK: compose the full prompt here. For proxy: the server
+  // re-composes using the same constants plus the `level` in extraBody.
   const systemPrompt = DEEP_REVIEW_PROMPT + (EXPERIENCE_VOICE[level] || EXPERIENCE_VOICE.enthusiast);
 
   for (let bi = 0; bi < batches.length; bi++) {
@@ -88,11 +143,14 @@ export async function runDeepReview(
       `[Photo ${i}: ${b.photo.name}${formatExifForPrompt(b.photo.exif)}]`
     );
 
-    const response = await callProvider(config.provider, config.apiKey, config.model, {
+    const response = await dispatchApiCall({
+      config,
+      endpoint: "deep-review",
       system: systemPrompt,
       images,
       textParts,
       maxTokens: 16384,
+      extraBody: { level },
     });
 
     const parsed = parseJSON(response.text, response.truncated) as DeepResponse;
@@ -111,7 +169,7 @@ export async function runDeepReview(
 export async function runCompare(
   photoA: Photo,
   photoB: Photo,
-  config: ProviderConfig,
+  config: ProviderConfig | null,
 ): Promise<CompareResponse> {
   const images = [
     { base64: photoA.base64!, mediaType: photoA.mediaType },
@@ -122,7 +180,9 @@ export async function runCompare(
     `[Frame B: ${photoB.name}${formatExifForPrompt(photoB.exif)}]\n\nCompare these two frames. Which is stronger?`,
   ];
 
-  const response = await callProvider(config.provider, config.apiKey, config.model, {
+  const response = await dispatchApiCall({
+    config,
+    endpoint: "compare",
     system: COMPARE_PROMPT,
     images,
     textParts,
