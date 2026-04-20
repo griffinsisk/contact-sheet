@@ -10,6 +10,15 @@ interface Message {
   images: ImagePart[];
   textParts: string[];
   maxTokens: number;
+  /**
+   * When true, wraps the system prompt in Anthropic's prompt-cache block.
+   * The first call writes the cache (~25% input-token cost premium on the
+   * cached tokens); subsequent calls within the 5-min TTL read it at ~10%
+   * cost. Only applied on the Anthropic path; no-op for other providers.
+   * Only meaningful server-side where the system prompt is stable across
+   * calls — BYOK batches vary too much to cache reliably.
+   */
+  cacheSystem?: boolean;
 }
 
 interface ProviderResponse {
@@ -30,19 +39,31 @@ async function callAnthropic(apiKey: string, model: string, msg: Message): Promi
     content.push({ type: "text", text: msg.textParts[i] });
   }
 
+  // The dangerous-direct-browser-access header is required for browser-side
+  // calls (BYOK). It's meaningless and inappropriate server-side (Next.js
+  // API routes), where CORS isn't involved.
+  const isBrowser = typeof window !== "undefined";
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+  };
+  if (isBrowser) {
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  }
+
+  const systemField = msg.cacheSystem
+    ? [{ type: "text" as const, text: msg.system, cache_control: { type: "ephemeral" as const } }]
+    : msg.system;
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
+    headers,
     body: JSON.stringify({
       model,
       max_tokens: msg.maxTokens,
       temperature: 0,
-      system: msg.system,
+      system: systemField,
       messages: [{ role: "user", content }],
     }),
   });
