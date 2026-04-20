@@ -1,5 +1,59 @@
 # Contact Sheet — Determinism v1 Build Plan
 
+---
+
+## Status: Phase 0 complete — Phase 2 descoped (2026-04-20)
+
+Phase 0's variance harness ran against the current `CULL_PROMPT` on 34 photos × 5 runs × 2 resolutions = 340 API calls to Claude Sonnet 4. The results invalidated the plan's core assumption that scoring variance was a meaningful UX problem.
+
+### What the harness found
+
+At 1024px (production resolution):
+
+| Metric | Value |
+|---|---|
+| Impact stdev | 0.25 |
+| Composition stdev | 0.29 |
+| Technical stdev | 0.31 |
+| Story stdev | 0.41 |
+| Overall stdev | 0.10 |
+| Rating stability | 100% |
+| Boundary crossings | 0 |
+| Noise floor (CUT-tier) | ~0 overall stdev |
+
+The single most-variant photo had an overall stdev of **2.0** — four runs scored 78, one run scored 83, all same rating tier. Photos ranked 4th and 5th on the most-variant list scored *identically* across all five runs. At `temperature: 0`, Claude Sonnet 4 is operating near its inherent determinism ceiling on this prompt.
+
+### Why this changes the plan
+
+The plan's Phase 0 gate:
+> If all dimensions show <5 point standard deviation and rating stability is >90%, determinism is not the biggest problem to solve. Reconsider priorities before proceeding.
+
+All dimensions came in <0.5 stdev and rating stability was 100%. The safeguard fired correctly — rubric decomposition would have been solving a problem that doesn't exist.
+
+### Revised scope
+
+**Descoped:** Phase 2 (rubric decomposition). Content preserved below as historical reference.
+
+**In scope:** Phase 1 (override log infrastructure). Unchanged from original plan. Two reasons to keep:
+1. Cheap scaffolding (1–2 days) that's useful regardless of future direction.
+2. It captures the signal needed to validate whether calibration is a real user pain point — specifically, photos where users override Claude's rating. Without that data, any future "teach Claude my taste" feature would be speculative.
+
+**New parallel track:** Shipping readiness audit. Redirecting the ~4 days that would have gone to Phase 2 toward the work that gets real photographers using the tool — at which point the override log will produce the signal needed to decide whether calibration work is warranted.
+
+### Portfolio narrative
+
+The pivot itself is the story: measured the assumed problem, found it didn't exist, redirected to shipping, instrumented for the next iteration. Complete engineering arc — hypothesis, validation, change of direction, forward-looking instrumentation.
+
+### Phase 0 gate decisions (answered in writing, per plan requirement)
+
+1. **Which dimension(s) to decompose in Phase 2?** None. Decomposition is descoped.
+2. **Judgment-bound or information-bound?** Neither in any meaningful way. 1024→1536 variance delta is <0.1 stdev on all dimensions. The problem isn't real at either resolution.
+3. **Is determinism the most valuable problem to solve right now?** No. Rating stability 100%, boundary crossings 0. Other initiatives have higher leverage.
+
+Raw harness report and full per-photo data: `~/Downloads/cs-harness-2026-04-20T15-34-42.json` (not committed; contains personal photo references).
+
+---
+
 ## Ground rules
 
 - **No phase starts until the previous phase's gate is passed.** Gates are explicit; no "while you're at it" scope additions.
@@ -177,6 +231,8 @@ Human verification:
 ---
 
 ## Phase 2 — Decompose One Dimension
+
+> **DESCOPED (2026-04-20)** — Phase 0 results showed variance is already at the model's inherent determinism ceiling. Decomposing would solve a non-problem. Content below is preserved as historical reference for the design pattern (enum observations + deterministic formula + Anthropic tool-use) — useful if a future calibration pass needs structured-output infrastructure.
 
 **Budget:** 3–4 days.
 **Goal:** Replace holistic scoring for the dimension selected in Phase 0 with enum observations + deterministic formula, in both cull and deep review passes.
