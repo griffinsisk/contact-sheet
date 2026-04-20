@@ -53,7 +53,12 @@ export interface HarnessSummary {
   resolution1024: ResolutionStats;
   resolution1536: ResolutionStats;
   resolutionDelta: DimensionVariance;
-  top5MostVariant1024: { photoId: string; filename: string; overallStdDev: number }[];
+  top5MostVariant1024: {
+    photoId: string;
+    filename: string;
+    overallStdDev: number;
+    runs: HarnessRunResult[];
+  }[];
 }
 
 type ProgressFn = (completed: number, total: number, photoName: string) => void;
@@ -130,11 +135,15 @@ export function computeHarnessSummary(report: HarnessReport): HarnessSummary {
     stats1024.meanStdDev[key] - stats1536.meanStdDev[key];
 
   const photoVariance = report.photos
-    .map(photo => ({
-      photoId: photo.photoId,
-      filename: photo.filename,
-      overallStdDev: stddev(photo.runs.filter(r => r.resolution === 1024).map(r => r.overall)),
-    }))
+    .map(photo => {
+      const runs1024 = photo.runs.filter(r => r.resolution === 1024);
+      return {
+        photoId: photo.photoId,
+        filename: photo.filename,
+        overallStdDev: stddev(runs1024.map(r => r.overall)),
+        runs: runs1024,
+      };
+    })
     .sort((a, b) => b.overallStdDev - a.overallStdDev);
 
   return {
@@ -166,6 +175,27 @@ export function downloadHarnessReport(report: HarnessReport, summary: HarnessSum
   URL.revokeObjectURL(url);
 }
 
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 4): Promise<T> {
+  let delay = 1000;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const retryable =
+        msg.includes("429") ||
+        msg.includes("529") ||
+        msg.includes("503") ||
+        msg.toLowerCase().includes("overloaded") ||
+        msg.toLowerCase().includes("rate");
+      if (!retryable || attempt === maxRetries) throw err;
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+  throw new Error("callWithRetry: unreachable");
+}
+
 export async function runHarness(
   photos: Photo[],
   config: ProviderConfig,
@@ -188,30 +218,51 @@ export async function runHarness(
       for (let runIndex = 0; runIndex < HARNESS_RUNS_PER_PHOTO; runIndex++) {
         onProgress?.(completed, totalCalls, photo.name);
 
-        const response = await callProvider(config.provider, config.apiKey, config.model, {
-          system: CULL_PROMPT,
-          images: [{ base64: b64, mediaType: "image/jpeg" }],
-          textParts: [`[Photo 0: ${photo.name}${formatExifForPrompt(photo.exif)}]`],
-          maxTokens: 512,
-        });
+        try {
+          const response = await callWithRetry(() =>
+            callProvider(config.provider, config.apiKey, config.model, {
+              system: CULL_PROMPT,
+              images: [{ base64: b64, mediaType: "image/jpeg" }],
+              textParts: [`[Photo 0: ${photo.name}${formatExifForPrompt(photo.exif)}]`],
+              maxTokens: 512,
+            }),
+          );
 
-        const parsed = parseJSON(response.text, response.truncated);
-        const result = parsed.cull?.[0];
+          const parsed = parseJSON(response.text, response.truncated);
+          const result = parsed.cull?.[0];
+          const s = result?.scores;
 
-        if (result) {
-          const s = result.scores;
-          runs.push({
-            resolution,
-            runIndex,
-            scores: {
-              impact: s?.impact ?? result.score,
-              composition: s?.composition ?? result.score,
-              technical: s?.technical ?? result.score,
-              story: s?.story ?? result.score,
-            },
-            overall: result.score,
-            rating: result.rating as Rating,
-          });
+          if (
+            result &&
+            s &&
+            typeof s.impact === "number" &&
+            typeof s.composition === "number" &&
+            typeof s.technical === "number" &&
+            typeof s.story === "number"
+          ) {
+            runs.push({
+              resolution,
+              runIndex,
+              scores: {
+                impact: s.impact,
+                composition: s.composition,
+                technical: s.technical,
+                story: s.story,
+              },
+              overall: result.score,
+              rating: result.rating as Rating,
+            });
+          } else {
+            console.warn(
+              `[harness] ${photo.name} run ${runIndex} @ ${resolution}px: missing dimension scores — skipping`,
+              result,
+            );
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[harness] ${photo.name} run ${runIndex} @ ${resolution}px failed after retries: ${msg}`,
+          );
         }
 
         completed++;
