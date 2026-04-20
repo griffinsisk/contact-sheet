@@ -538,6 +538,34 @@ export default function ContactSheet() {
                 </p>
               </div>
               <div className="flex items-center gap-3 flex-shrink-0 ml-6">
+                {config && config.provider === "anthropic" && (
+                  <button
+                    onClick={async () => {
+                      if (harnessRunning) return;
+                      setHarnessRunning(true);
+                      setHarnessProgress("Starting harness…");
+                      setError(null);
+                      try {
+                        const report = await runHarness(photos, config, (done, total, name) => {
+                          setHarnessProgress(name ? `Harness ${done + 1}/${total} — ${name}` : `Harness complete`);
+                        });
+                        const summary = computeHarnessSummary(report);
+                        downloadHarnessReport(report, summary);
+                      } catch (err: any) {
+                        setError(err.message || "Harness failed");
+                      } finally {
+                        setHarnessRunning(false);
+                        setHarnessProgress("");
+                      }
+                    }}
+                    disabled={harnessRunning}
+                    title={`Dev: variance harness — ${photos.length} photos × 5 runs × 2 resolutions = ${photos.length * 10} API calls`}
+                    className="px-4 py-3 font-label text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-primary hover:bg-surface-high transition-colors flex items-center gap-2 border border-outline-variant disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">science</span>
+                    {harnessRunning ? harnessProgress : "HARNESS"}
+                  </button>
+                )}
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   className="px-4 py-3 font-label text-[11px] uppercase tracking-widest bg-surface-high text-on-surface hover:bg-surface-bright transition-colors flex items-center gap-2"
