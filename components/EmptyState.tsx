@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
+import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
 import { ExperienceLevel, SessionSummary } from "@/lib/types";
 import { isRawFile } from "@/lib/raw-preview";
 
@@ -10,9 +11,29 @@ interface Props {
   onFiles: (files: File[]) => void;
   sessions: SessionSummary[];
   onRestoreSession: (id: string) => void;
+  onOpenSettings: () => void;
 }
 
-export default function EmptyState({ level, onLevelChange, onFiles, sessions, onRestoreSession }: Props) {
+export default function EmptyState({ level, onLevelChange, onFiles, sessions, onRestoreSession, onOpenSettings }: Props) {
+  const { user } = useUser();
+  const isPro = user?.publicMetadata?.tier === "pro";
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
+
+  const startCheckout = async () => {
+    setUpgradeLoading(true);
+    try {
+      const res = await fetch("/api/stripe/create-checkout-session", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else {
+        setUpgradeLoading(false);
+        alert(data.error || "Checkout failed");
+      }
+    } catch {
+      setUpgradeLoading(false);
+      alert("Checkout failed");
+    }
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,15 +81,119 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
     e.target.value = "";
   }, [onFiles]);
 
-  const levels: { key: ExperienceLevel; label: string }[] = [
-    { key: "learning", label: "Learning" },
-    { key: "enthusiast", label: "Enthusiast" },
-    { key: "pro", label: "Pro" },
+  const levels: { key: ExperienceLevel; label: string; subtitle: string; description: string }[] = [
+    {
+      key: "learning",
+      label: "Learning",
+      subtitle: "New to critique",
+      description: "Each note is a micro-lesson — concepts explained in context so you build intuition shot by shot.",
+    },
+    {
+      key: "enthusiast",
+      label: "Enthusiast",
+      subtitle: "Shoots regularly",
+      description: "Conversational feedback. Names techniques naturally without over-explaining the basics.",
+    },
+    {
+      key: "pro",
+      label: "Pro",
+      subtitle: "Working photographer",
+      description: "Technical shorthand only. Direct calls on DOF, compression, separation — no lectures.",
+    },
   ];
+
+  const cardBase =
+    "flex flex-col justify-between p-6 border border-outline-variant/40 bg-surface-lowest/40 hover:border-primary/60 transition-colors duration-200";
+  const ctaBase =
+    "w-full py-3 mono-label text-[11px] uppercase tracking-widest font-bold transition-colors duration-200 disabled:opacity-50";
 
   return (
     <main className="flex-grow flex flex-col items-start justify-center px-6 pt-12 pb-24">
       <div className="w-full max-w-5xl flex flex-col items-start mx-auto">
+        {/* Hero tagline — pre-edit scoring differentiator */}
+        <div className="mb-10">
+          <span className="mono-label text-[10px] text-primary tracking-[0.25em]">
+            PRE-EDIT SCORING
+          </span>
+          <h2 className="mt-3 text-4xl md:text-5xl serif-italic text-on-surface leading-tight">
+            We judge the raw material, not the edit.
+          </h2>
+          <p className="mt-4 text-on-surface-variant max-w-2xl">
+            Drop a shoot. Get HERO / SELECT / MAYBE / CUT calls on what you captured — before Lightroom, before the edit,
+            before the attachment sets in.
+          </p>
+        </div>
+
+        {/* Three-path picker */}
+        <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+          {/* Try free */}
+          <div className={cardBase}>
+            <div>
+              <span className="mono-label text-[10px] text-outline tracking-[0.2em]">TRY FREE</span>
+              <h3 className="mt-2 serif-italic text-2xl text-on-surface">10 photos, no account</h3>
+              <p className="mt-3 text-sm text-on-surface-variant">
+                Drop up to 10 frames. Runs on our Claude key. No sign-up, no card.
+              </p>
+            </div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className={`${ctaBase} mt-6 bg-primary text-on-primary hover:bg-primary-dim`}
+            >
+              Start Free
+            </button>
+          </div>
+
+          {/* Upgrade to Pro */}
+          <div className={cardBase}>
+            <div>
+              <span className="mono-label text-[10px] text-outline tracking-[0.2em]">PRO · $5/MO</span>
+              <h3 className="mt-2 serif-italic text-2xl text-on-surface">Unlimited culls</h3>
+              <p className="mt-3 text-sm text-on-surface-variant">
+                Full shoots, deep reviews, comparisons. Cancel anytime.
+              </p>
+            </div>
+            {isPro ? (
+              <div className={`${ctaBase} mt-6 bg-surface-high text-on-surface-variant text-center`}>You're Pro</div>
+            ) : (
+              <>
+                <SignedOut>
+                  <SignInButton mode="modal">
+                    <button className={`${ctaBase} mt-6 bg-surface-high text-on-surface hover:bg-surface-bright`}>
+                      Upgrade to Pro
+                    </button>
+                  </SignInButton>
+                </SignedOut>
+                <SignedIn>
+                  <button
+                    onClick={startCheckout}
+                    disabled={upgradeLoading}
+                    className={`${ctaBase} mt-6 bg-surface-high text-on-surface hover:bg-surface-bright`}
+                  >
+                    {upgradeLoading ? "Loading…" : "Upgrade to Pro"}
+                  </button>
+                </SignedIn>
+              </>
+            )}
+          </div>
+
+          {/* BYOK */}
+          <div className={cardBase}>
+            <div>
+              <span className="mono-label text-[10px] text-outline tracking-[0.2em]">BRING YOUR OWN KEY</span>
+              <h3 className="mt-2 serif-italic text-2xl text-on-surface">~$0.01 / photo</h3>
+              <p className="mt-3 text-sm text-on-surface-variant">
+                Paste an Anthropic key. Calls go direct from your browser — your key never touches our servers.
+              </p>
+            </div>
+            <button
+              onClick={onOpenSettings}
+              className={`${ctaBase} mt-6 bg-transparent border border-outline-variant text-on-surface hover:bg-surface-high`}
+            >
+              Paste Your Key
+            </button>
+          </div>
+        </div>
+
         {/* Drop Zone */}
         <div
           onDrop={handleDrop}
@@ -125,24 +250,31 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
         </div>
 
         {/* Experience Level Picker */}
-        <div className="mt-20 w-full max-w-xl">
+        <div className="mt-20 w-full">
           <div className="flex justify-between items-end mb-4 px-2">
             <span className="mono-label text-[10px] text-outline">Feedback Style</span>
+            <span className="mono-label text-[10px] text-outline/60">Pick the tone that matches where you are</span>
           </div>
-          <div className="grid grid-cols-3 bg-surface-low p-1" role="radiogroup" aria-label="Feedback style">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-surface-low p-2" role="radiogroup" aria-label="Feedback style">
             {levels.map((l) => (
               <button
                 key={l.key}
                 onClick={() => onLevelChange(l.key)}
                 role="radio"
                 aria-checked={level === l.key}
-                className={`py-4 mono-label text-[11px] transition-colors ${
+                className={`flex flex-col items-start text-left px-6 py-5 transition-colors ${
                   level === l.key
-                    ? "bg-surface-bright text-primary font-bold"
-                    : "text-on-surface-variant hover:text-on-surface"
+                    ? "bg-surface-bright"
+                    : "hover:bg-surface-high/60"
                 }`}
               >
-                {l.label}
+                <div className="flex items-baseline justify-between w-full mb-1">
+                  <span className={`mono-label text-[12px] ${level === l.key ? "text-primary font-bold" : "text-on-surface"}`}>
+                    {l.label}
+                  </span>
+                  <span className="mono-label text-[9px] text-outline tracking-[0.15em] uppercase">{l.subtitle}</span>
+                </div>
+                <span className="mt-2 text-[13px] leading-relaxed text-on-surface-variant">{l.description}</span>
               </button>
             ))}
           </div>

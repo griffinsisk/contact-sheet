@@ -6,6 +6,7 @@ import { Provider, ProviderConfig, PROVIDER_INFO } from "@/lib/types";
 interface Props {
   onSave: (config: ProviderConfig) => void;
   initial?: ProviderConfig | null;
+  onCancel?: () => void;
 }
 
 const PROVIDER_ICONS: Record<Provider, string> = {
@@ -14,7 +15,7 @@ const PROVIDER_ICONS: Record<Provider, string> = {
   gemini: "cloud",
 };
 
-export default function ProviderSetup({ onSave, initial }: Props) {
+export default function ProviderSetup({ onSave, initial, onCancel }: Props) {
   const [provider, setProvider] = useState<Provider>(initial?.provider || "anthropic");
   const [apiKey, setApiKey] = useState(initial?.apiKey || "");
   const [model, setModel] = useState(initial?.model || PROVIDER_INFO.anthropic.models[0].id);
@@ -76,6 +77,17 @@ export default function ProviderSetup({ onSave, initial }: Props) {
           className="relative w-full max-w-2xl bg-surface-bright p-8 md:p-12 border border-outline-variant/10"
           style={{ boxShadow: "-20px 0 60px -15px rgba(0,0,0,0.8)" }}
         >
+          {/* Close button */}
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              aria-label="Close"
+              className="absolute top-4 right-4 text-on-surface-variant hover:text-primary transition-colors p-2"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          )}
+
           {/* Meta label */}
           <div className="mono-label text-[10px] text-primary mb-8 flex items-center gap-2">
             <span className="w-2 h-2 bg-primary" />
@@ -88,9 +100,9 @@ export default function ProviderSetup({ onSave, initial }: Props) {
           </h1>
 
           <div className="space-y-8 md:space-y-12">
-            {/* Provider cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {(Object.keys(PROVIDER_INFO) as Provider[]).map((p) => {
+            {/* Provider cards — Anthropic only for v1 */}
+            <div className="grid grid-cols-1 gap-4">
+              {(["anthropic"] as Provider[]).map((p) => {
                 const isActive = provider === p;
                 const pInfo = PROVIDER_INFO[p];
                 return (

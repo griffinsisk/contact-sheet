@@ -460,7 +460,7 @@ export default function ContactSheet() {
   // Free tier users can proceed without a BYOK config; the API proxy
   // handles them server-side.
   if (showSettings) {
-    return <ProviderSetup onSave={handleConfigSave} initial={config} />;
+    return <ProviderSetup onSave={handleConfigSave} initial={config} onCancel={() => setShowSettings(false)} />;
   }
 
   const tier = resolveTier(config, isPro);
@@ -516,6 +516,7 @@ export default function ContactSheet() {
             onFiles={handleFiles}
             sessions={sessions}
             onRestoreSession={handleRestoreSession}
+            onOpenSettings={() => setShowSettings(true)}
           />
         )}
 
