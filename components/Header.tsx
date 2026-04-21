@@ -1,6 +1,7 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import UpgradeButton from "./UpgradeButton";
 
 interface Props {
   onHistory: () => void;
@@ -44,6 +45,7 @@ export default function Header({ onHistory, onSettings, onAddFiles }: Props) {
         >
           <span className="material-symbols-outlined">settings</span>
         </button>
+        <UpgradeButton />
         <SignedOut>
           <SignInButton mode="modal">
             <button className="bg-surface-high px-4 py-2 hover:bg-surface-bright transition-colors duration-200 mono-label text-[10px] uppercase tracking-widest font-bold">

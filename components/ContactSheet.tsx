@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useUser } from "@clerk/nextjs";
 import {
   Photo, ProviderConfig, CullResult, DeepResult, Rating,
   ExperienceLevel, CompareResponse, SessionSummary,
@@ -28,6 +29,10 @@ import ExportModal from "./ExportModal";
 type Phase = "empty" | "uploading" | "ready" | "culling" | "culled" | "reviewing" | "reviewed";
 
 export default function ContactSheet() {
+  // Clerk — publicMetadata.tier is set by Stripe webhook
+  const { user } = useUser();
+  const isPro = user?.publicMetadata?.tier === "pro";
+
   // Provider
   const [config, setConfig] = useState<ProviderConfig | null>(() => loadProviderConfig());
 
@@ -142,7 +147,7 @@ export default function ContactSheet() {
     const target = photosToProcess || photos;
     if (target.length === 0) return;
 
-    const tier = resolveTier(config, false);
+    const tier = resolveTier(config, isPro);
     const gate = canProcessPhotos(tier, target.length);
     if (!gate.canProcess) {
       setError(gate.reason || "Cannot process photos");
@@ -184,7 +189,7 @@ export default function ContactSheet() {
       setPhase(Object.keys(cullResults).length > 0 ? "culled" : "empty");
       setProgressMsg("");
     }
-  }, [config, photos]);
+  }, [config, photos, isPro]);
 
   // ── Deep review ─────────────────────────────────────────────────────────
 
@@ -192,7 +197,7 @@ export default function ContactSheet() {
     const indices = Array.from(deepSelected).sort((a, b) => a - b);
     if (indices.length === 0) return;
 
-    const tier = resolveTier(config, false);
+    const tier = resolveTier(config, isPro);
     const gate = canProcessPhotos(tier, indices.length);
     if (!gate.canProcess) {
       setError(gate.reason || "Cannot process photos");
@@ -224,7 +229,7 @@ export default function ContactSheet() {
       setPhase("culled");
       setProgressMsg("");
     }
-  }, [config, photos, deepSelected, level, cullResults]);
+  }, [config, photos, deepSelected, level, cullResults, isPro]);
 
   // ── Compare ─────────────────────────────────────────────────────────────
 
@@ -239,7 +244,7 @@ export default function ContactSheet() {
   const startCompare = useCallback(async () => {
     if (compareSelected.length !== 2) return;
 
-    const tier = resolveTier(config, false);
+    const tier = resolveTier(config, isPro);
     const gate = canProcessPhotos(tier, 2);
     if (!gate.canProcess) {
       setError(gate.reason || "Cannot process photos");
@@ -258,7 +263,7 @@ export default function ContactSheet() {
     } finally {
       setCompareLoading(false);
     }
-  }, [config, compareSelected, photos]);
+  }, [config, compareSelected, photos, isPro]);
 
   // ── Deep selection toggle ───────────────────────────────────────────────
 
@@ -458,8 +463,7 @@ export default function ContactSheet() {
     return <ProviderSetup onSave={handleConfigSave} initial={config} />;
   }
 
-  // Derive tier once per render. isPro is hardcoded false pending Clerk.
-  const tier = resolveTier(config, false);
+  const tier = resolveTier(config, isPro);
   const freeUsage = tier === "free" ? getFreeUsage() : null;
 
   return (
