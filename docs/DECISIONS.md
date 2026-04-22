@@ -111,6 +111,60 @@ At `temperature: 0`, Claude Sonnet 4 is running near its inherent determinism ce
 
 ---
 
+## 2026-04-22 — Scoring rubric pivot: intent-aware grading over conventional craft
+
+**Decision.** Rework the cull + deep-review rubrics from "score against absolute photography standards" to "score against the photographer's intent and attempt." Five coordinated changes:
+
+1. **Shoot-level intent picker** at cull-start with 8 presets + optional free-form text.
+2. **Split TECHNICAL** into RAW_QUALITY (objective: recoverable data, exposure, dynamic range) and CRAFT_EXECUTION (intent-conditional: did the photographer land what they were attempting).
+3. **Persistent style profile** generated from 8–20 uploaded favorites; stored in Clerk `publicMetadata` (Pro) or localStorage (free); injected as prompt preamble.
+4. **Override learning:** rolling last-30 user overrides persisted + fed back as few-shot examples and as input to profile regeneration.
+5. **Set-level style inference:** first batch of each cull writes a one-sentence "apparent style" read that layers on top of persistent profile.
+
+**Problem that drove this.** Running the current rubric on a 34-photo mixed set produced defensible-looking scores (100% rating stability per Phase 0 harness) but *wrong* rating calls on stylistic frames: an intentional motion-blur portrait scored 45 CUT; a blurry dog scored 79 SELECT; an accidental bed shot scored 68 MAYBE; a tight-crop landscape scored 68 MAYBE. The pattern: anything unconventional got punished as technical failure; anything technically clean survived regardless of intent or content quality.
+
+**Diagnosis.** The current TECHNICAL dimension (20%) conflates "is the data there" with "did you execute to convention" and moves those in opposite directions under stylistic intent. The rubric has no concept of intent. Adding weights alone doesn't fix it — it moves the failure from one axis to another.
+
+**New weight structure:**
+
+| Dimension | Weight | Notes |
+|---|---|---|
+| IMPACT | 30% | Style-agnostic; unchanged |
+| COMPOSITION | 25% | Down 5 — less critical for documentary/street/events |
+| RAW_QUALITY | 15% | Objective; cannot be styled away (blown highlights stay blown) |
+| CRAFT_EXECUTION | 10% | Intent-conditional; low weight deliberate |
+| STORY | 20% | Unchanged |
+
+**New CUT rule.** CUT requires *either* broken fundamentals *or* nothing to develop. Technically-fine-but-pointless is MAYBE at most, not CUT. Fixes the "accidental shot rated too high" case without over-harsh thresholds.
+
+**Intent picker presets (V1):**
+- Documentary / candid
+- Street
+- Film / intentional imperfection
+- Sharp wildlife / sports / action
+- Fine-art landscape
+- Portrait / people
+- Events (weddings, parties, performances)
+- Mixed — judge each photo individually
+
+**"Mixed" behavior.** Disables intent-conditional CRAFT for that cull. Each photo scored on its own apparent intent inferred from the frame.
+
+**Persistent vs per-session:** V1 is persistent-only. Per-session tone references (moodboard match, V1.5 carve-out) layer on top of persistent profile. Intent picker + optional free-form covers ~80% of per-session signal for V1.
+
+**Conflict resolution in prompt:** when session intent contradicts persistent profile, session intent wins for that cull. The profile is background; intent is foreground.
+
+**Free-tier policy.** All tiers get intent picker + rubric split. Persistent profile generation capped at one per browser (localStorage tracked) using our Anthropic key — single most expensive action for a free user (~15 vision inputs in one call). Rationale: the profile is the strongest demo moment; gating it to Pro would make free feel crippled. Onboarding favorites do NOT count against the 10-photo cull quota.
+
+**Storage model.** One profile per user for V1. Re-generatable from settings. Edit-prose UI punted to post-V1.
+
+**Demo fixtures.** The 34-photo test set committed to `fixtures/demo-shoot/` alongside the generated profile artifact — reproducibility for the interview matters more than any photo-privacy concern on a personal portfolio.
+
+**Scope cost.** Shifts v1 ship date from "end of next week" (~2 eng-days) to ~2.5 weeks (6 eng-days). Accepted because the portfolio demo fails if a working photographer feels unseen by the rubric.
+
+**Evidence.** Four user-flagged miscalls (boba 45, bed 68, dog 79, NZ landscape 68) reproducing consistent failure modes under the current prompt. Documented in conversation log 2026-04-21.
+
+---
+
 ## 2026-04-20 — Session logistics: Claude Desktop worktree → main branch
 
 **Decision.** Continue determinism work in this session rather than Claude Desktop. Removed the Claude Desktop worktree at `.claude/worktrees/distracted-montalcini-f71a87`, un-nested the project from `contact-sheet-v3/handoff-v3/*` to `contact-sheet-v3/*`, gitignored test photos and the Anthropic API key file.
@@ -138,6 +192,11 @@ Decisions to *not* ship something in v1, with revisit triggers:
 | Rate-limit retry in production cull/deep | Exists in harness, needs porting | Real users hit 429s |
 | Session restore: full-res base64 for HERO/SELECT | Bigger UX fix | Photographers report it |
 | Experience-level scoring thresholds | Currently voice-only | Learning users report CUT fatigue |
+| Per-session tone references (moodboard) | Intent picker + free-form covers 80% of signal | Users request "match this specific look" for a shoot |
+| Multiple named profiles per user (wedding mode / street mode) | One profile suffices for V1 | User explicitly asks to switch modes |
+| Anonymized override telemetry | No real users yet | Override log has >100 cross-user events |
+| IG / Pinterest / portfolio URL ingestion | "Upload favorites" is the better product posture | Never — favorites wins on trust + signal quality |
+| Server-side BYOK | Client-side keeps key trust simple | Pro user requests it |
 
 Each was deferred for a specific reason captured when the decision was made (not enough signal, scope discipline, or simply out of the v1 critical path).
 

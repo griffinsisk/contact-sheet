@@ -1,105 +1,223 @@
-# Next Session Plan
+# Next Session Plan — Intent-Aware Scoring
 
-**Starting state:** `main` at `89dc5de`. Clean working tree. Target: v1 shippable by end of next week.
+**Starting state:** `main` at `ffeab8d` (onboarding three-path picker + polish committed; Stripe wired; local Stripe webhook flow verified end-to-end with test card).
+
+**Target:** V1 shippable in ~2.5 weeks. V1 = intent-aware rubric + persistent style profile + override learning + Vercel deploy.
 
 ## First 5 minutes — verify state
 
 ```bash
 cd "/Users/griffin.sisk/Desktop/AI Projects/contact-sheet/contact-sheet-v3"
-git log --oneline -3             # confirm 89dc5de is HEAD
+git log --oneline -5             # confirm ffeab8d is HEAD
 npx tsc --noEmit                 # must return clean
-cat .env.local | grep -c "^ANTHROPIC_API_KEY=sk-ant"    # 1
-cat .env.local | grep -c "^CLERK_SECRET_KEY=sk_"         # 1
-cat .env.local | grep -c "^NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_"  # 1
-npm run dev                      # boot — check port, usually 3001 or 3004
+npm run dev                      # boot — usually :3001 or :3004
 ```
 
-Visit the URL. Header should show a **SIGN IN** button on the right. Click it — Clerk's modal should open. If it doesn't, something regressed between sessions.
+Visit URL. Header should show UPGRADE TO PRO button (or "You're Pro" if previously tested), SIGN IN (if signed out), three-path empty state with hero tagline.
 
-## Before building — paste Stripe keys to `.env.local`
-
-Open `testing-keys` at project root (gitignored). Copy to `.env.local`:
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...`
-- `STRIPE_SECRET_KEY=sk_test_...`
-- `STRIPE_PRICE_ID=price_...`
-- Leave `STRIPE_WEBHOOK_SECRET` empty — it gets generated when the webhook endpoint is registered against Vercel.
-
-## Ordered TODO
-
-### 1. Stripe subscription flow (1 day)
-- New route `app/api/stripe/create-checkout-session/route.ts` — takes an authenticated user (Clerk), creates a Stripe Checkout session for `STRIPE_PRICE_ID` with `success_url` back to `/`, returns the URL.
-- Client-side "Upgrade to Pro" button somewhere in the UI (empty state + toolbar?) that POSTs to the above and does `window.location = url`.
-- New route `app/api/stripe/webhook/route.ts` — verifies Stripe signature with `STRIPE_WEBHOOK_SECRET`, handles `customer.subscription.created` / `.updated` / `.deleted` by updating Clerk user metadata: `publicMetadata.tier = "pro" | "free"`.
-- Update `lib/tier.ts::resolveTier` to read `isPro` from Clerk's `useUser()` in the component, pass through. (It already accepts `isPro` as a param — just stop hardcoding it to false.)
-- For local testing, use Stripe CLI: `stripe listen --forward-to localhost:3001/api/stripe/webhook` prints a webhook secret to paste into `.env.local`.
-
-### 2. Route protection decision (30 min)
-Decide: does the free tier require sign-in, or is it anonymous?
-- **Anonymous free (simpler):** anyone can hit `/api/cull` etc. within free quota. Use localStorage counter.
-- **Sign-in free (better data):** Clerk-protect the proxy routes. Clerk user metadata tracks usage instead of localStorage.
-
-My lean: **anonymous free for v1**. Lower friction, matches the "try before you buy" posture. Adds middleware protection only on the Stripe/webhook routes, not on the AI proxy routes.
-
-Add to middleware.ts after Stripe is wired. Do NOT protect AI proxy routes if going anonymous.
-
-### 3. Onboarding UI (1 day)
-Empty state is currently a drop zone. Replace with three-path picker:
-- **Try free** → 10 photos, no account
-- **Upgrade ($5/mo)** → Clerk sign-in → Stripe checkout
-- **Bring your own key** → existing ProviderSetup flow
-
-Copy needs to include: "Your key never leaves your browser" (for BYOK), estimated cost for BYOK ("about $0.01 per photo at 1024px"), pre-edit scoring positioning ("we judge the raw material, not the edit"). That last one is the strongest differentiator and is currently buried.
-
-### 4. Vercel deploy (2 hours)
-- `gh repo create contact-sheet --private --source=. --push`
-- Sign in to Vercel, import from GitHub.
-- Set env vars in Vercel dashboard (copy each value from `.env.local`).
-- Update Stripe webhook endpoint in the Stripe dashboard to `https://<vercel-domain>/api/stripe/webhook`, generate real webhook secret, update Vercel env.
-- Update Clerk application URLs in Clerk dashboard to match Vercel domain.
-- Verify: sign-in flow works, Stripe checkout works, webhook fires.
-
-### 5. Polish for photographer testing (parallel with above)
-Order by friction a photographer will hit:
-1. **Rate limit retry in prod cull/deep** — port from `lib/harness.ts::callWithRetry`. 1 hour. One throttled batch shouldn't kill a 100-photo run.
-2. **Hide OpenAI/Gemini cards in `components/ProviderSetup.tsx`** — 15 min, portfolio narrative.
-3. **Session restore UX** — store full-res base64 for HERO+SELECT on save so restored sessions can re-analyze/compare without re-upload. ~1 day.
-4. **Experience-level scoring thresholds** — Learning users currently see CUT on most frames and quit. Bump HERO threshold to 75 (from 85), etc., for Learning mode. 0.5 day. Touch `lib/prompts.ts` and the RATING mapping in `lib/api.ts`.
-5. **Archive `contact-sheet-artifact.jsx`** — 92KB stale monolith at app root. Move to `archive/` or delete. 5 min.
-
-### 6. Deferred — parked until signal justifies
-See `docs/DECISIONS.md` deferred-items table for the full list with revisit triggers. Don't touch these without signal:
-- Phase 1 override log infrastructure (useful eventually, not a shipping blocker)
-- Rubric decomposition (doesn't exist as a problem per Phase 0)
-- Style calibration / per-user personalization (no data yet)
-- Test suite, typography consolidation
-
-## Open questions to resolve before building
-
-- **Anonymous free or sign-in-required free?** See #2 above. Decide first — affects middleware setup and the onboarding copy.
-- **Upgrade-to-Pro button placement.** Empty state only, toolbar always, or both? My lean: both, styled as a subtle ghost button in the toolbar.
-- **Should we commit any anonymized snapshot of the harness summary to the repo?** Currently only in `~/Downloads/`. A commit would make the "look, we measured" story reproducible from the repo alone. Tradeoff: photo filenames (IMG_9623.jpg etc.) would be committed — harmless but personal.
-
-## Known gaps to flag if they become blockers
-
-- Vercel Hobby tier has a 4.5MB request body limit. A batch of 20 photos at 1024px ≈ 2–6MB — may exceed on some batches. May need to reduce `CULL_BATCH_SIZE` for the proxy path (keep client-side BYOK batch size as-is).
-- Next.js middleware with Clerk + free-tier usage tracking: currently localStorage only. If we move to sign-in-required free, usage needs to move into Clerk user metadata too.
-- `contact-sheet-artifact.jsx` at app root is still the old single-file version. Confusing for anyone reading the code. Archive.
-
-## Commit reference (for `git blame` archaeology)
-
-| Commit | What |
-|---|---|
-| `89dc5de` | DECISIONS.md |
-| `8fa306d` + `0a2fd6c` | Clerk scaffold merge |
-| `222cfc3` + `c57e1c8` | Tier UI wiring merge |
-| `0566ff7` | `lib/tier.ts` |
-| `154ee40` | `lib/api.ts` dispatch refactor |
-| `24eff8b` | Server routes + prompt caching |
-| `0a1797d` | Harness button in ready banner; gitignore test photos |
-| `32649ba` + `be518ce` + `8662d30` | Phase 0 harness |
-| `160a4ea` + `03b8515` | Docs reorg + Phase 0 pivot |
-| `4845887` | Project flattened (un-nest handoff-v3) |
+**Phase A work can commit straight to `main` (short-lived). Phase B+ goes on a `feature/intent-aware-scoring` branch.**
 
 ---
 
-When updating this file next session: rewrite from scratch rather than append. This is a rolling plan, not a log. History lives in git and `DECISIONS.md`.
+## Phase A — Deploy + core rubric fix (~1 day)
+
+Goal: get a URL live + stop the current prompt from mis-rating stylistic frames.
+
+### A.1 — Vercel deploy (~2 hrs)
+
+- `gh repo create contact-sheet --private --source=. --push`
+- Import to Vercel; set env vars from `.env.local` (Anthropic, Clerk, Stripe — except `STRIPE_WEBHOOK_SECRET`).
+- Stripe dashboard → register webhook endpoint `https://<vercel-domain>/api/stripe/webhook` → copy generated `whsec_` into Vercel env.
+- Clerk dashboard → update application URLs to Vercel domain.
+- Smoke test: sign in, Stripe checkout (test card 4242), webhook fires, tier updates.
+
+### A.2 — Intent picker (~0.5 day)
+
+New component: `components/IntentPicker.tsx`. Appears at cull-start (either as a banner above the cull button when photos are loaded, or as a required step between "photos loaded" and "cull starts" — TBD during build; lean banner).
+
+**8 presets:**
+- Documentary / candid
+- Street
+- Film / intentional imperfection
+- Sharp wildlife / sports / action
+- Fine-art landscape
+- Portrait / people
+- Events (weddings, parties, performances)
+- Mixed — judge each photo individually
+
+Single-select. Optional free-form text field ("anything else we should know about this shoot?"). Sticky per browser tab via `sessionStorage`. Re-promptable via a link in the cull banner.
+
+Wire: `startCull` in `ContactSheet.tsx` reads the current intent + free-form and passes through to `runCull` → prompt builder.
+
+### A.3 — Prompt refactor (~0.5 day)
+
+Rewrite `CULL_PROMPT` and `DEEP_REVIEW_PROMPT` in `lib/prompts.ts`:
+
+- Split TECHNICAL → RAW_QUALITY (15%) + CRAFT_EXECUTION (10%).
+- Drop COMPOSITION 30% → 25%.
+- Keep IMPACT 30%, STORY 20%.
+- Rewrite CUT rule: CUT requires *broken fundamentals* OR *nothing to develop*. Technically-fine-but-pointless = MAYBE, not CUT.
+- Add `INTENT:` section that receives `session_intent` + `session_free_form` and modifies how CRAFT is graded.
+- Update calibration anchors for the new dimensions.
+
+"Mixed" intent: prompt is told to infer per-photo intent from the frame itself instead of applying session intent to CRAFT.
+
+**Validation at end of Phase A:** re-run the 34-photo test set with each of the four flagged failure cases (boba, bed, dog, NZ landscape). Boba should move from CUT to SELECT. Bed should move from MAYBE to CUT. Dog should *stay* at MAYBE/SELECT but the scores should now *justify* that given intent. NZ landscape should move up.
+
+If those four cases don't land, iterate on the prompt before moving to Phase B.
+
+---
+
+## Phase B — Style profile (~1.5 days)
+
+Goal: generate a persistent per-user style profile from 8–20 favorites; inject as prompt preamble.
+
+### B.1 — Favorites upload UI (~0.5 day)
+
+New onboarding flow, entry point = new card in the empty-state three-path picker OR a settings action. Drop zone accepts 8–20 images. Min 8, recommended 15, max 20.
+
+### B.2 — Profile generation (~0.5 day)
+
+New route: `app/api/style-profile/route.ts`. Accepts base64 images, calls Claude with a dedicated `STYLE_PROFILE_PROMPT`, returns `{ prose: string, hints: StyleProfileHints }`.
+
+`StyleProfileHints` shape:
+```ts
+type StyleProfileHints = {
+  aestheticTags: string[];          // e.g. ["intentional_blur", "warm_tones", "tight_crops", "candid_over_posed"]
+  weightAdjustments?: Partial<{     // bounded, e.g. ±5
+    impact: number;
+    composition: number;
+    rawQuality: number;
+    craftExecution: number;
+    story: number;
+  }>;
+  cutThresholdShift?: number;       // ±10, nudges CUT boundary
+  primaryIntentAffinity?: IntentPreset;  // which intent preset matches this style best
+};
+```
+
+Prose = shown to user. Hints = injected into prompt.
+
+### B.3 — Storage (~0.25 day)
+
+- **Pro:** Clerk `publicMetadata.styleProfile = { prose, hints, generatedAt }`. Updated via a new server route that uses `clerkClient.users.updateUser`.
+- **Free:** `localStorage["cs-style-profile"] = { prose, hints, generatedAt }` + `localStorage["cs-profile-generated"] = "1"` (the one-per-browser gate).
+- Helper in `lib/style-profile.ts` that returns the current profile regardless of tier.
+
+Free tier: **one generation per browser, ever.** If user wants to regenerate, they need Pro or BYOK.
+
+### B.4 — Display + regenerate (~0.25 day)
+
+Settings panel shows current prose profile + "Regenerate" button (Pro only for free users who've already used their one). Shows tags as chips. No editing UI in V1.
+
+### Prompt preamble order (locked)
+
+```
+[persistent_profile.prose]
+[persistent_profile.hints → weight adjustments applied]
+[session_intent from picker]
+[session_free_form if provided]
+[V1.5 slot: session_tone_refs — unused in V1]
+---
+[cull prompt body]
+[batch images]
+```
+
+---
+
+## Phase C — Set-level inference + override learning (~2 days)
+
+Goal: the tool gets smarter with use.
+
+### C.1 — Set-level style read (~0.5 day)
+
+Before batch 1 of a cull, fire one extra small API call with the first 8–12 downsized images asking Claude to write a one-sentence "apparent style" read ("This set reads as warm-tone film-emulation candid at golden hour, with tight crops favored over negative space"). Cache in session state. Prepend to each batch's prompt *after* persistent profile.
+
+Only fires when session has ≥10 photos (otherwise not enough signal). Costs ~$0.01 per cull. Skippable if latency is sensitive.
+
+### C.2 — Override persistence (~0.5 day)
+
+New module `lib/overrides.ts`. Rolling last 30 entries, keyed by photo content hash (not filename — filenames change).
+
+```ts
+type OverrideEntry = {
+  photoHash: string;
+  sessionIntent: IntentPreset;
+  originalScore: number;
+  originalRating: Rating;
+  userRating: Rating;
+  timestamp: number;
+};
+```
+
+Storage: Clerk `publicMetadata.overrides` (Pro) or `localStorage["cs-overrides"]` (free). `ratingOverrides` state in `ContactSheet.tsx` writes to the persistent log on every override.
+
+### C.3 — Few-shot injection (~0.5 day)
+
+In cull prompt builder, pull the last 5–10 overrides (weighted toward same intent) and format as:
+
+```
+PAST OVERRIDES FROM THIS PHOTOGRAPHER (how they actually rate frames):
+- Frame with [brief description]: model rated SELECT 72, photographer said HERO.
+- Frame with [brief description]: model rated SELECT 78, photographer said CUT.
+...
+Use these as calibration — this photographer's taste differs from defaults here.
+```
+
+Storing a "brief description" per override either requires keeping the original photo bytes (expensive) or a short model-written description at override time. Lean: generate a 10-word description at override time with a tiny model call; cache on the override entry.
+
+### C.4 — Overrides → profile regen signal (~0.5 day)
+
+When user regenerates their style profile, pull last 30 overrides into the `STYLE_PROFILE_PROMPT` as additional signal ("here's how they've actually been rating things — update the profile accordingly"). Profile naturally drifts toward taste over time.
+
+---
+
+## Phase D — Demo fixtures + polish (~1 day)
+
+### D.1 — Commit demo fixtures
+
+- `fixtures/demo-shoot/` — the 34-photo test set with sanitized filenames (`shot_001.jpg` … `shot_034.jpg`).
+- `fixtures/demo-profile.json` — the generated profile for that set, once Phase B works.
+- `fixtures/README.md` — one paragraph on how to reproduce.
+
+### D.2 — Rate-limit retry in prod cull/deep
+
+Port from `lib/harness.ts::callWithRetry`. One throttled batch shouldn't kill a 100-photo run.
+
+### D.3 — Learning-mode threshold bump
+
+Learning users see too many CUTs and quit. Bump HERO threshold to 75 (from 85) etc. for Learning mode only. Touch `lib/prompts.ts` + RATING mapping in `lib/api.ts`.
+
+### D.4 — Final copy pass
+
+Three-path picker copy, style-profile onboarding copy, intent picker copy. Consistency sweep.
+
+---
+
+## V1.5 carve-outs — designed for, not built
+
+These are deliberately scoped OUT of V1 but the data model / prompt structure accommodates them:
+
+1. **Per-session tone references (moodboard match).** User drops 3–5 reference images at cull-start; generates a temporary tone note layered between session intent and prompt body. The prompt preamble already reserves a slot for this.
+2. **Multiple named profiles per user** ("wedding mode" / "street mode"). Storage migrates `styleProfile` → `styleProfiles: { [name]: StyleProfile }`, adds picker in settings.
+3. **Anonymized override telemetry.** Opt-in upload of overrides for prompt iteration.
+4. **Profile prose editing.** User edits the prose; system re-derives hints from edited prose.
+
+Each has a trigger in `docs/DECISIONS.md` for when to revisit.
+
+---
+
+## Known gaps to flag if they become blockers
+
+- Vercel Hobby tier 4.5MB request body limit. Batch of 20 photos at 1024px ≈ 2–6MB. May need to reduce `CULL_BATCH_SIZE` for the proxy path if a batch hits the ceiling.
+- Style profile generation with 15–20 high-res images in one request may exceed the same 4.5MB limit. Lean: resize aggressively for profile generation (512px on long edge is plenty for style inference) rather than reusing the cull 1024px pipeline.
+- Override content-hash: photo hash should be computed from downsized pixels, not file bytes, so re-saves of the same photo still hash to the same value.
+
+---
+
+## Commit cadence
+
+Phase A: commit per feature (A.1, A.2, A.3 separate commits) directly to main.
+Phase B–D: feature branch `feature/intent-aware-scoring`, commit per step, merge when Phase D.1 fixtures validate.
+
+When updating this file next session: rewrite rather than append. Rolling plan, not a log. History lives in git + `DECISIONS.md`.
