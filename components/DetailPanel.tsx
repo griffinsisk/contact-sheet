@@ -149,28 +149,35 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
           </div>
         )}
 
-        {/* Score dimension bars (deep review only) */}
-        {deep?.scores && (
-          <div className="space-y-6 mb-12">
-            {(Object.entries(SCORE_DIMENSIONS) as [string, { label: string; color: string; weight: string }][]).map(([key, dim]) => {
-              const score = deep.scores[key as keyof typeof deep.scores];
-              return (
-                <div key={key} className="space-y-2">
-                  <div className="flex justify-between font-label text-[10px] tracking-widest uppercase">
-                    <span className="text-on-surface-variant">{dim.label}</span>
-                    <span className={DIMENSION_TEXT_COLORS[key]}>{score}%</span>
+        {/* Score dimension bars — deep review scores preferred, cull scores as fallback */}
+        {(deep?.scores || cull?.scores) && (() => {
+          const dims = deep?.scores || cull!.scores!;
+          const source = deep?.scores ? "DEEP REVIEW" : "CULL";
+          return (
+            <div className="space-y-6 mb-12">
+              <div className="font-label text-[9px] tracking-widest uppercase text-on-surface-variant/60">
+                DIMENSION SCORES · {source}
+              </div>
+              {(Object.entries(SCORE_DIMENSIONS) as [string, { label: string; color: string; weight: string }][]).map(([key, dim]) => {
+                const score = dims[key as keyof typeof dims] ?? 0;
+                return (
+                  <div key={key} className="space-y-2">
+                    <div className="flex justify-between font-label text-[10px] tracking-widest uppercase">
+                      <span className="text-on-surface-variant">{dim.label} <span className="opacity-50">{dim.weight}</span></span>
+                      <span className={DIMENSION_TEXT_COLORS[key]}>{score}%</span>
+                    </div>
+                    <div className="h-[2px] w-full bg-surface-high">
+                      <div
+                        className={`h-full ${DIMENSION_COLORS[key]} transition-all duration-1000 ease-out`}
+                        style={{ width: `${score}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-[2px] w-full bg-surface-high">
-                    <div
-                      className={`h-full ${DIMENSION_COLORS[key]} transition-all duration-1000 ease-out`}
-                      style={{ width: `${score}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* Feedback sections */}
         {deep && (

@@ -67,11 +67,24 @@ function intentSection(intent: SessionIntent | null): string {
 
 const RUBRIC_BODY = `Score each photo on FIVE dimensions (each 0–100), then compute the weighted overall:
 
-IMPACT (30%) — Emotional resonance before analysis. Does this frame stop you? [NOT intent-conditional]
+IMPACT (30%) — Emotional resonance before analysis. Does this frame stop you? Mood, light, and atmosphere live here. [NOT intent-conditional]
 COMPOSITION (25%) — Eye flow, geometry, negative space, framing intentionality. Thresholds flex with intent; composition itself always matters. [Partially intent-conditional]
 RAW_QUALITY (15%) — Is the data there? Exposure in range, recoverable shadows/highlights, noise manageable, dynamic range intact, color information preserved. You CANNOT style your way out of missing data. [ALWAYS objective — NOT intent-conditional]
-CRAFT_EXECUTION (10%) — Did the photographer land what they were attempting? Focus where intended, stable where intended, framing cleanly delivered. [HEAVILY intent-conditional — see SESSION INTENT above]
-STORY (20%) — Decisive moment, narrative pull, authenticity, meaning beyond the surface. [NOT intent-conditional]
+CRAFT_EXECUTION (10%) — Did the photographer land what they were attempting? Focus where intended, stable where intended, framing cleanly delivered. [HEAVILY intent-conditional — see SESSION INTENT above, but read GUARDRAIL below]
+STORY (20%) — Decisive moment, narrative pull, gesture, relationship, meaning beyond the surface. [NOT intent-conditional]
+
+STORY GUARDRAIL (read carefully — this is where the rubric most often over-scores):
+- Mood, light, and atmosphere are NOT story. They count toward IMPACT, not STORY. Warm light on a bed is mood; a person reacting in that warm light is story.
+- STORY ≤ 45 when the frame has no clear subject doing something, no decisive moment, no gesture, no visible relationship between elements.
+- Do NOT infer narrative from ambience, EXIF, or filename. Read what is visibly present in the frame.
+- A "pretty thing" photographed well (flower, food, pet portrait with no expression beyond "thing exists") scores STORY 30–45, not 70+.
+- If you find yourself writing "intimate / authentic / atmospheric" without pointing to a specific subject action or moment, STORY is probably inflated — reduce it.
+
+CRAFT GUARDRAIL (read carefully — intent relaxes CRAFT, it does NOT eliminate it):
+- Intent softens CRAFT thresholds by ~15–25 points. It does not raise them. A documentary frame with a visibly soft subject is still a craft miss, just less punishing than the same miss on wildlife.
+- Distinguish DELIBERATE aesthetic blur (consistent across the frame, complements the subject, reads as a choice) from MISSED FOCUS (subject specifically unsharp while other elements are sharp, or uniformly soft with no aesthetic reading). Missed focus costs CRAFT 15–30 points under ANY intent, including film/documentary/street.
+- Subject-eye softness on a portrait or animal close-up costs CRAFT even under documentary intent — you just don't collapse the whole score.
+- RESOLUTION CAVEAT: you are viewing downscaled images (~1024px). If you cannot confidently judge focus at this size, score CRAFT conservatively in the 60–70 range — do NOT default to 80+ just because the thumbnail looks clean. Uncertainty ≠ craft success.
 
 OVERALL = (impact × 0.30) + (composition × 0.25) + (raw_quality × 0.15) + (craft_execution × 0.10) + (story × 0.20), rounded to integer.
 
@@ -80,6 +93,12 @@ RATING from overall score:
 - 70–84: SELECT — Strong, worth developing.
 - 50–69: MAYBE — Something there but not fully realized.
 - 0–49: CUT — Broken fundamentals OR nothing to develop.
+
+SELECT vs MAYBE (another common over-scoring trap):
+- MAYBE is the correct default when "something is here but not enough to develop confidently." When you are torn between MAYBE and SELECT, choose MAYBE.
+- SELECT requires GENUINE strength on IMPACT or STORY — not just technical correctness plus decent composition. A well-exposed, decently-composed frame with no moment is a MAYBE, not a SELECT.
+- If the best thing you can say about a frame is "the light is nice" or "the colors are warm," it is very likely a MAYBE. The overall score should reflect that — aim for 55–65, not 72+.
+- Avoid the 72–78 gravity well. If you find yourself scoring most frames in that band, your rubric is compressed. Spread scores out: weak frames 40–55, middle 55–68, strong 72–84, exceptional 85+.
 
 CUT RULE (strict): a score in the 0–49 band requires ONE of:
   (a) Broken fundamentals — unrecoverable exposure, out-of-focus subject where focus was clearly the goal, severe camera shake where stability was the goal; OR
@@ -96,8 +115,13 @@ CALIBRATION ANCHORS (fixed reference points — use consistently):
 - Once-in-a-lifetime perfect moment: impact 96, comp 94, raw 90, craft 92, story 95 → 94 HERO
 - Tight-crop landscape, beautiful light (intent=landscape): impact 78, comp 62, raw 88, craft 82, story 55 → 72 SELECT
 - Sharp wildlife, eye in focus, clean separation: impact 80, comp 78, raw 85, craft 92, story 65 → 78 SELECT
+- Warm-lit intimate interior, no visible subject doing anything, mood only (intent=documentary): impact 58, comp 50, raw 65, craft 70, story 28 → 52 MAYBE
+- Slightly soft candid portrait, ordinary expression, decent light (intent=documentary): impact 55, comp 55, raw 72, craft 55, story 48 → 56 MAYBE
+- Pretty subject (flower / pet / food) cleanly shot, no visual idea beyond "it's nice" (intent=mixed): impact 60, comp 58, raw 78, craft 78, story 38 → 58 MAYBE
+- Documentary pet close-up, visibly soft eye at full-res, charming expression (intent=documentary): impact 72, comp 60, raw 72, craft 52, story 55 → 63 MAYBE
 
-Note rows 3 and 4: same frame, different intent → different CRAFT score → different rating. This is the key behavior.`;
+Note rows 3 and 4: same frame, different intent → different CRAFT score → different rating. This is the key behavior.
+Note the last four anchors: they live in the 50–63 band on purpose. This band is REAL and should be used. Do not dodge it.`;
 
 // ── Cull prompt builder ─────────────────────────────────────────────────────
 
