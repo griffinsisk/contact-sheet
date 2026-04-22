@@ -7,6 +7,7 @@ import {
   ExperienceLevel, CompareResponse, SessionSummary,
 } from "@/lib/types";
 import { runCull, runDeepReview, runCompare } from "@/lib/api";
+import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "@/lib/constants";
 import { resolveTier, canProcessPhotos, incrementFreeUsage, getFreeUsage } from "@/lib/tier";
 import { runHarness, computeHarnessSummary, downloadHarnessReport } from "@/lib/harness";
 import { resizeImage, makeThumb } from "@/lib/resize";
@@ -23,6 +24,7 @@ import ProviderSetup from "./ProviderSetup";
 import PhotoGrid from "./PhotoGrid";
 import DetailPanel from "./DetailPanel";
 import CullBanner from "./CullBanner";
+import CullProgress from "./CullProgress";
 import CompareModal from "./CompareModal";
 import ExportModal from "./ExportModal";
 
@@ -64,6 +66,8 @@ export default function ContactSheet() {
   const [filterRating, setFilterRating] = useState<Rating | "ALL">("ALL");
   const [progressMsg, setProgressMsg] = useState("");
   const [progressPct, setProgressPct] = useState(0);
+  const [progressDone, setProgressDone] = useState(0);
+  const [progressTotal, setProgressTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [harnessRunning, setHarnessRunning] = useState(false);
   const [harnessProgress, setHarnessProgress] = useState("");
@@ -157,6 +161,8 @@ export default function ContactSheet() {
     setPhase("culling");
     setError(null);
     setProgressPct(0);
+    setProgressDone(0);
+    setProgressTotal(target.length);
     setCullResults({});
     setDeepResults({});
     setCuratorialNotes(null);
@@ -166,7 +172,9 @@ export default function ContactSheet() {
       const results = await runCull(target, config, (msg, batch, total) => {
         setProgressMsg(msg);
         setProgressPct(Math.round(((batch + 1) / total) * 100));
+        setProgressDone(Math.min(batch * CULL_BATCH_SIZE, target.length));
       });
+      setProgressDone(target.length);
       setCullResults(results);
       if (tier === "free") incrementFreeUsage(target.length);
 
@@ -207,13 +215,17 @@ export default function ContactSheet() {
     setPhase("reviewing");
     setError(null);
     setProgressPct(0);
+    setProgressDone(0);
+    setProgressTotal(indices.length);
 
     try {
       const { analyses, curatorialNotes: notes, recommendedSequence: seq } =
         await runDeepReview(photos, indices, config, level, (msg, batch, total) => {
           setProgressMsg(msg);
           setProgressPct(Math.round(((batch + 1) / total) * 100));
+          setProgressDone(Math.min(batch * DEEP_BATCH_SIZE, indices.length));
         });
+      setProgressDone(indices.length);
 
       setDeepResults(analyses);
       setCuratorialNotes(notes);
@@ -520,28 +532,14 @@ export default function ContactSheet() {
           />
         )}
 
-        {/* Progress indicator */}
+        {/* Progress indicator — shimmer + cycling photography phrases */}
         {(phase === "uploading" || phase === "culling" || phase === "reviewing") && (
-          <div className="px-8 py-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="mono-label text-[12px] text-primary" style={{ animation: "pulse 1.5s infinite" }}>
-                {progressMsg}
-              </span>
-            </div>
-            <div className="h-[2px] w-full bg-surface-high overflow-hidden">
-              <div
-                className="h-full bg-primary"
-                style={{
-                  width: phase === "uploading"
-                    ? `${progressPct}%`
-                    : `${Math.min(progressPct + 40, 99)}%`,
-                  transition: phase === "uploading"
-                    ? "width 0.3s ease-out"
-                    : `width ${progressPct === 0 ? "0.3s" : "20s"} ${progressPct === 0 ? "ease-out" : "cubic-bezier(0.1, 0.5, 0.1, 1)"}`,
-                }}
-              />
-            </div>
-          </div>
+          <CullProgress
+            phase={phase}
+            statusMsg={progressMsg}
+            done={progressDone}
+            total={progressTotal}
+          />
         )}
 
         {/* Error */}
