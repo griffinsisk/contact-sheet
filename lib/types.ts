@@ -128,6 +128,34 @@ export interface CompareResponse {
 
 export type ExperienceLevel = "learning" | "enthusiast" | "pro";
 
+// ── Intent types ────────────────────────────────────────────────────────────
+
+export type IntentPreset =
+  | "documentary"
+  | "street"
+  | "film"
+  | "wildlife"
+  | "landscape"
+  | "portrait"
+  | "events"
+  | "mixed";
+
+export interface SessionIntent {
+  preset: IntentPreset;
+  freeForm?: string;
+}
+
+export const INTENT_LABELS: Record<IntentPreset, { title: string; subtitle: string }> = {
+  documentary: { title: "Documentary", subtitle: "Candid, real moments" },
+  street:      { title: "Street",      subtitle: "Public life, spontaneous" },
+  film:        { title: "Film",        subtitle: "Intentional imperfection" },
+  wildlife:    { title: "Wildlife",    subtitle: "Sharp action / sports" },
+  landscape:   { title: "Landscape",   subtitle: "Fine-art, scenic" },
+  portrait:    { title: "Portrait",    subtitle: "People, expression" },
+  events:      { title: "Events",      subtitle: "Weddings, performances" },
+  mixed:       { title: "Mixed",       subtitle: "Judge each on its own" },
+};
+
 // ── Session types ───────────────────────────────────────────────────────────
 
 export interface SessionSummary {

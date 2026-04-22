@@ -1,4 +1,4 @@
-import { Photo, ProviderConfig, CullResult, DeepResult, CullResponse, DeepResponse, CompareResponse, ExperienceLevel } from "./types";
+import { Photo, ProviderConfig, CullResult, DeepResult, CullResponse, DeepResponse, CompareResponse, ExperienceLevel, SessionIntent } from "./types";
 import { callProvider, parseJSON } from "./providers";
 import { CULL_PROMPT, DEEP_REVIEW_PROMPT, COMPARE_PROMPT, EXPERIENCE_VOICE } from "./prompts";
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "./constants";
@@ -61,6 +61,7 @@ async function dispatchApiCall(
 export async function runCull(
   photos: Photo[],
   config: ProviderConfig | null,
+  intent: SessionIntent | null,
   onProgress?: ProgressFn,
 ): Promise<Record<number, CullResult>> {
   const allResults: Record<number, CullResult> = {};
@@ -91,6 +92,7 @@ export async function runCull(
       images,
       textParts,
       maxTokens: 4096,
+      extraBody: intent ? { intent } : undefined,
     });
 
     const parsed = parseJSON(response.text, response.truncated) as CullResponse;
@@ -110,6 +112,7 @@ export async function runDeepReview(
   indices: number[],
   config: ProviderConfig | null,
   level: ExperienceLevel = "enthusiast",
+  intent: SessionIntent | null = null,
   onProgress?: ProgressFn,
 ): Promise<{
   analyses: Record<number, DeepResult>;
@@ -150,7 +153,7 @@ export async function runDeepReview(
       images,
       textParts,
       maxTokens: 16384,
-      extraBody: { level },
+      extraBody: intent ? { level, intent } : { level },
     });
 
     const parsed = parseJSON(response.text, response.truncated) as DeepResponse;

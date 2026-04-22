@@ -4,9 +4,10 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import {
   Photo, ProviderConfig, CullResult, DeepResult, Rating,
-  ExperienceLevel, CompareResponse, SessionSummary,
+  ExperienceLevel, CompareResponse, SessionSummary, IntentPreset,
 } from "@/lib/types";
 import { runCull, runDeepReview, runCompare } from "@/lib/api";
+import { loadSessionIntent, saveSessionIntent } from "@/lib/session-intent";
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "@/lib/constants";
 import { resolveTier, canProcessPhotos, incrementFreeUsage, getFreeUsage } from "@/lib/tier";
 import { runHarness, computeHarnessSummary, downloadHarnessReport } from "@/lib/harness";
@@ -25,6 +26,7 @@ import PhotoGrid from "./PhotoGrid";
 import DetailPanel from "./DetailPanel";
 import CullBanner from "./CullBanner";
 import CullProgress from "./CullProgress";
+import IntentPicker from "./IntentPicker";
 import CompareModal from "./CompareModal";
 import ExportModal from "./ExportModal";
 
@@ -48,6 +50,29 @@ export default function ContactSheet() {
 
   // Rating overrides (human > AI)
   const [ratingOverrides, setRatingOverrides] = useState<Record<number, Rating>>({});
+
+  // Session intent (sticky per browser tab via sessionStorage)
+  const [intentPreset, setIntentPreset] = useState<IntentPreset | null>(null);
+  const [intentFreeForm, setIntentFreeForm] = useState<string>("");
+
+  // Hydrate intent from sessionStorage after mount (avoids SSR hydration mismatch)
+  useEffect(() => {
+    const saved = loadSessionIntent();
+    if (saved) {
+      setIntentPreset(saved.preset);
+      setIntentFreeForm(saved.freeForm || "");
+    }
+  }, []);
+
+  const handleIntentPreset = useCallback((p: IntentPreset) => {
+    setIntentPreset(p);
+    saveSessionIntent({ preset: p, freeForm: intentFreeForm });
+  }, [intentFreeForm]);
+
+  const handleIntentFreeForm = useCallback((text: string) => {
+    setIntentFreeForm(text);
+    if (intentPreset) saveSessionIntent({ preset: intentPreset, freeForm: text });
+  }, [intentPreset]);
 
   // UI state
   const [phase, setPhase] = useState<Phase>("empty");
@@ -169,7 +194,10 @@ export default function ContactSheet() {
     setRecommendedSequence(null);
 
     try {
-      const results = await runCull(target, config, (msg, batch, total) => {
+      const effectiveIntent = intentPreset
+        ? { preset: intentPreset, freeForm: intentFreeForm.trim() || undefined }
+        : { preset: "mixed" as IntentPreset };
+      const results = await runCull(target, config, effectiveIntent, (msg, batch, total) => {
         setProgressMsg(msg);
         setProgressPct(Math.round(((batch + 1) / total) * 100));
         setProgressDone(Math.min(batch * CULL_BATCH_SIZE, target.length));
@@ -197,7 +225,7 @@ export default function ContactSheet() {
       setPhase(Object.keys(cullResults).length > 0 ? "culled" : "empty");
       setProgressMsg("");
     }
-  }, [config, photos, isPro]);
+  }, [config, photos, isPro, intentPreset, intentFreeForm]);
 
   // ── Deep review ─────────────────────────────────────────────────────────
 
@@ -219,8 +247,11 @@ export default function ContactSheet() {
     setProgressTotal(indices.length);
 
     try {
+      const effectiveIntent = intentPreset
+        ? { preset: intentPreset, freeForm: intentFreeForm.trim() || undefined }
+        : { preset: "mixed" as IntentPreset };
       const { analyses, curatorialNotes: notes, recommendedSequence: seq } =
-        await runDeepReview(photos, indices, config, level, (msg, batch, total) => {
+        await runDeepReview(photos, indices, config, level, effectiveIntent, (msg, batch, total) => {
           setProgressMsg(msg);
           setProgressPct(Math.round(((batch + 1) / total) * 100));
           setProgressDone(Math.min(batch * DEEP_BATCH_SIZE, indices.length));
@@ -241,7 +272,7 @@ export default function ContactSheet() {
       setPhase("culled");
       setProgressMsg("");
     }
-  }, [config, photos, deepSelected, level, cullResults, isPro]);
+  }, [config, photos, deepSelected, level, cullResults, isPro, intentPreset, intentFreeForm]);
 
   // ── Compare ─────────────────────────────────────────────────────────────
 
@@ -556,17 +587,17 @@ export default function ContactSheet() {
 
         {/* Ready banner — user uploaded photos, confirm before culling */}
         {phase === "ready" && photos.length > 0 && (
-          <div className="mx-8 mt-6 p-6 bg-surface-low border-l-2 border-primary">
-            <div className="flex justify-between items-center">
+          <div className="mx-8 mt-6 p-6 bg-surface-low border-l-2 border-primary space-y-6">
+            <div className="flex justify-between items-start gap-6">
               <div>
                 <h3 className="font-label text-[12px] text-on-surface uppercase tracking-widest mb-1">
                   {photos.length} {photos.length === 1 ? "photo" : "photos"} loaded
                 </h3>
                 <p className="font-body text-sm text-on-surface-variant">
-                  Add more files with the button above, or start the AI cull when ready.
+                  Pick an intent below, then start the cull.
                 </p>
               </div>
-              <div className="flex items-center gap-3 flex-shrink-0 ml-6">
+              <div className="flex items-center gap-3 flex-shrink-0">
                 {config && config.provider === "anthropic" && (
                   <button
                     onClick={async () => {
@@ -610,6 +641,15 @@ export default function ContactSheet() {
                   START CULL
                 </button>
               </div>
+            </div>
+
+            <div className="pt-4 border-t border-outline-variant">
+              <IntentPicker
+                preset={intentPreset}
+                freeForm={intentFreeForm}
+                onPresetChange={handleIntentPreset}
+                onFreeFormChange={handleIntentFreeForm}
+              />
             </div>
           </div>
         )}
