@@ -12,7 +12,7 @@ type HarnessResolution = 1024 | 1536;
 export interface HarnessRunResult {
   resolution: HarnessResolution;
   runIndex: number;
-  scores: { impact: number; composition: number; technical: number; story: number };
+  scores: { impact: number; composition: number; rawQuality: number; craftExecution: number; story: number };
   overall: number;
   rating: Rating;
 }
@@ -34,7 +34,8 @@ export interface HarnessReport {
 export interface DimensionVariance {
   impact: number;
   composition: number;
-  technical: number;
+  rawQuality: number;
+  craftExecution: number;
   story: number;
   overall: number;
 }
@@ -82,7 +83,8 @@ function computeResolutionStats(photos: HarnessPhoto[], resolution: HarnessResol
     const pv: DimensionVariance = {
       impact: stddev(runs.map(r => r.scores.impact)),
       composition: stddev(runs.map(r => r.scores.composition)),
-      technical: stddev(runs.map(r => r.scores.technical)),
+      rawQuality: stddev(runs.map(r => r.scores.rawQuality)),
+      craftExecution: stddev(runs.map(r => r.scores.craftExecution)),
       story: stddev(runs.map(r => r.scores.story)),
       overall: stddev(runs.map(r => r.overall)),
     };
@@ -111,7 +113,8 @@ function computeResolutionStats(photos: HarnessPhoto[], resolution: HarnessResol
     meanStdDev: {
       impact: avg("impact"),
       composition: avg("composition"),
-      technical: avg("technical"),
+      rawQuality: avg("rawQuality"),
+      craftExecution: avg("craftExecution"),
       story: avg("story"),
       overall: avg("overall"),
     },
@@ -120,7 +123,8 @@ function computeResolutionStats(photos: HarnessPhoto[], resolution: HarnessResol
     noiseFloor: nCut > 0 ? {
       impact: avgCut("impact"),
       composition: avgCut("composition"),
-      technical: avgCut("technical"),
+      rawQuality: avgCut("rawQuality"),
+      craftExecution: avgCut("craftExecution"),
       story: avgCut("story"),
       overall: avgCut("overall"),
     } : null,
@@ -154,7 +158,8 @@ export function computeHarnessSummary(report: HarnessReport): HarnessSummary {
     resolutionDelta: {
       impact: delta("impact"),
       composition: delta("composition"),
-      technical: delta("technical"),
+      rawQuality: delta("rawQuality"),
+      craftExecution: delta("craftExecution"),
       story: delta("story"),
       overall: delta("overall"),
     },
@@ -237,7 +242,8 @@ export async function runHarness(
             s &&
             typeof s.impact === "number" &&
             typeof s.composition === "number" &&
-            typeof s.technical === "number" &&
+            typeof s.rawQuality === "number" &&
+            typeof s.craftExecution === "number" &&
             typeof s.story === "number"
           ) {
             runs.push({
@@ -246,7 +252,8 @@ export async function runHarness(
               scores: {
                 impact: s.impact,
                 composition: s.composition,
-                technical: s.technical,
+                rawQuality: s.rawQuality,
+                craftExecution: s.craftExecution,
                 story: s.story,
               },
               overall: result.score,

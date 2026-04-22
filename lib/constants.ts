@@ -6,10 +6,11 @@ export const RATING_CONFIG = {
 } as const;
 
 export const SCORE_DIMENSIONS = {
-  impact:      { label: "IMPACT",        color: "#e8a035", weight: "30%" },
-  composition: { label: "COMPOSITION",   color: "#6ea4d4", weight: "30%" },
-  technical:   { label: "TECHNICAL",     color: "#8b5cf6", weight: "20%" },
-  style_story: { label: "STYLE & STORY", color: "#06b6d4", weight: "20%" },
+  impact:         { label: "IMPACT",         color: "#e8a035", weight: "30%" },
+  composition:    { label: "COMPOSITION",    color: "#6ea4d4", weight: "25%" },
+  rawQuality:     { label: "RAW QUALITY",    color: "#8b5cf6", weight: "15%" },
+  craftExecution: { label: "CRAFT",          color: "#b891f5", weight: "10%" },
+  story:          { label: "STORY",          color: "#06b6d4", weight: "20%" },
 } as const;
 
 export const CULL_BATCH_SIZE = 20;

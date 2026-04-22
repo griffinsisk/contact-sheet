@@ -47,6 +47,10 @@
   /* Score dimension colors */
   --color-score-impact: #e8a035;
   --color-score-composition: #6ea4d4;
+  --color-score-raw: #8b5cf6;
+  --color-score-craft: #b891f5;
+  --color-score-story: #06b6d4;
+  /* Legacy aliases (kept for any straggler references) */
   --color-score-technical: #8b5cf6;
   --color-score-style: #06b6d4;
 

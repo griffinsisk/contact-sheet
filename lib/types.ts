@@ -78,16 +78,19 @@ export interface Photo {
 
 export type Rating = "HERO" | "SELECT" | "MAYBE" | "CUT";
 
+export interface DimensionScores {
+  impact: number;
+  composition: number;
+  rawQuality: number;
+  craftExecution: number;
+  story: number;
+}
+
 export interface CullResult {
   index: number;
   score: number;
   rating: Rating;
-  scores?: {
-    impact: number;
-    composition: number;
-    technical: number;
-    story: number;
-  };
+  scores?: DimensionScores;
   reason: string;
 }
 
@@ -95,12 +98,7 @@ export interface DeepResult {
   index: number;
   rating: Rating;
   score: number;
-  scores: {
-    impact: number;
-    composition: number;
-    technical: number;
-    style_story: number;
-  };
+  scores: DimensionScores;
   title: string;
   technical: string;
   style_story: string;

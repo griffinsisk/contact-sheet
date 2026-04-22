@@ -1,6 +1,6 @@
 import { Photo, ProviderConfig, CullResult, DeepResult, CullResponse, DeepResponse, CompareResponse, ExperienceLevel, SessionIntent } from "./types";
 import { callProvider, parseJSON } from "./providers";
-import { CULL_PROMPT, DEEP_REVIEW_PROMPT, COMPARE_PROMPT, EXPERIENCE_VOICE } from "./prompts";
+import { CULL_PROMPT, DEEP_REVIEW_PROMPT, COMPARE_PROMPT, EXPERIENCE_VOICE, buildCullPrompt, buildDeepReviewPrompt } from "./prompts";
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "./constants";
 import { formatExifForPrompt } from "./exif";
 import { downsizeForCull, resizeToMax } from "./resize";
@@ -88,7 +88,7 @@ export async function runCull(
     const response = await dispatchApiCall({
       config,
       endpoint: "cull",
-      system: CULL_PROMPT,
+      system: buildCullPrompt(intent),
       images,
       textParts,
       maxTokens: 4096,
@@ -130,8 +130,8 @@ export async function runDeepReview(
   let lastSequence: number[] | null = null;
 
   // For direct/BYOK: compose the full prompt here. For proxy: the server
-  // re-composes using the same constants plus the `level` in extraBody.
-  const systemPrompt = DEEP_REVIEW_PROMPT + (EXPERIENCE_VOICE[level] || EXPERIENCE_VOICE.enthusiast);
+  // re-composes using the same constants plus the `level` + `intent` in extraBody.
+  const systemPrompt = buildDeepReviewPrompt(intent) + (EXPERIENCE_VOICE[level] || EXPERIENCE_VOICE.enthusiast);
 
   for (let bi = 0; bi < batches.length; bi++) {
     const batch = batches[bi];

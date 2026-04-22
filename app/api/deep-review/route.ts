@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callProvider } from "@/lib/providers";
-import { DEEP_REVIEW_PROMPT, EXPERIENCE_VOICE } from "@/lib/prompts";
+import { buildDeepReviewPrompt, EXPERIENCE_VOICE } from "@/lib/prompts";
+import { SessionIntent, IntentPreset } from "@/lib/types";
 
 // Server-side deep-review endpoint for the free + pro tiers.
 //
 // Body: {
-//   images: ImagePart[];
-//   textParts: string[];
-//   maxTokens?: number;
+//   images; textParts; maxTokens?;
 //   level?: "learning" | "enthusiast" | "pro";
+//   intent?: SessionIntent;
 // }
 // Returns: { text: string; truncated: boolean }
 
@@ -16,6 +16,20 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 type Level = keyof typeof EXPERIENCE_VOICE;
+
+const VALID_PRESETS: IntentPreset[] = [
+  "documentary", "street", "film", "wildlife",
+  "landscape", "portrait", "events", "mixed",
+];
+
+function coerceIntent(raw: unknown): SessionIntent | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const preset = r.preset;
+  if (typeof preset !== "string" || !VALID_PRESETS.includes(preset as IntentPreset)) return null;
+  const freeForm = typeof r.freeForm === "string" ? r.freeForm.slice(0, 500) : undefined;
+  return { preset: preset as IntentPreset, freeForm };
+}
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -42,8 +56,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const intent = coerceIntent(body?.intent);
   const voice = EXPERIENCE_VOICE[level as Level] ?? EXPERIENCE_VOICE.enthusiast;
-  const system = DEEP_REVIEW_PROMPT + voice;
+  const system = buildDeepReviewPrompt(intent) + voice;
 
   try {
     const response = await callProvider("anthropic", apiKey, model, {
@@ -51,7 +66,7 @@ export async function POST(req: NextRequest) {
       images,
       textParts,
       maxTokens,
-      cacheSystem: true,
+      cacheSystem: false,
     });
     return NextResponse.json(response);
   } catch (err: any) {

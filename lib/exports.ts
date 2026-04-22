@@ -128,7 +128,7 @@ export function generateManifest(
     const d = deepResults[i];
     t += `${p.name}\n` + "-".repeat(40) + "\n";
     t += `Rating: ${c.rating} | Overall: ${c.score}/100\n`;
-    if (d?.scores) t += `Impact: ${d.scores.impact} | Composition: ${d.scores.composition} | Technical: ${d.scores.technical} | Style & Story: ${d.scores.style_story}\n`;
+    if (d?.scores) t += `Impact: ${d.scores.impact} | Composition: ${d.scores.composition} | Raw Quality: ${d.scores.rawQuality} | Craft: ${d.scores.craftExecution} | Story: ${d.scores.story}\n`;
     if (d?.title) t += `Title: ${d.title}\n`;
     t += "\n";
     if (d) {

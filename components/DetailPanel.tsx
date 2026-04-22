@@ -26,15 +26,17 @@ const RATING_OPTIONS: { rating: Rating; color: string; activeColor: string }[] =
 const DIMENSION_COLORS: Record<string, string> = {
   impact: "bg-score-impact",
   composition: "bg-score-composition",
-  technical: "bg-score-technical",
-  style_story: "bg-score-style",
+  rawQuality: "bg-score-raw",
+  craftExecution: "bg-score-craft",
+  story: "bg-score-story",
 };
 
 const DIMENSION_TEXT_COLORS: Record<string, string> = {
   impact: "text-score-impact",
   composition: "text-score-composition",
-  technical: "text-score-technical",
-  style_story: "text-score-style",
+  rawQuality: "text-score-raw",
+  craftExecution: "text-score-craft",
+  story: "text-score-story",
 };
 
 export default function DetailPanel({ photo, cull, deep, ratingOverride, config, onRatingOverride, onClose }: Props) {

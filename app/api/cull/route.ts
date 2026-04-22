@@ -1,17 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callProvider } from "@/lib/providers";
-import { CULL_PROMPT } from "@/lib/prompts";
+import { buildCullPrompt } from "@/lib/prompts";
+import { SessionIntent, IntentPreset } from "@/lib/types";
 
 // Server-side cull endpoint for the free + pro tiers. BYOK users call
 // Anthropic directly from the browser and never hit this route.
 //
-// Body: { images: ImagePart[]; textParts: string[]; maxTokens?: number }
+// Body: { images; textParts; maxTokens?; intent?: SessionIntent }
 // Returns: { text: string; truncated: boolean }
-//
-// Auth is not enforced yet. Added in the next iteration alongside Clerk.
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+const VALID_PRESETS: IntentPreset[] = [
+  "documentary", "street", "film", "wildlife",
+  "landscape", "portrait", "events", "mixed",
+];
+
+function coerceIntent(raw: unknown): SessionIntent | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const preset = r.preset;
+  if (typeof preset !== "string" || !VALID_PRESETS.includes(preset as IntentPreset)) return null;
+  const freeForm = typeof r.freeForm === "string" ? r.freeForm.slice(0, 500) : undefined;
+  return { preset: preset as IntentPreset, freeForm };
+}
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -38,13 +51,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const intent = coerceIntent(body?.intent);
+
   try {
     const response = await callProvider("anthropic", apiKey, model, {
-      system: CULL_PROMPT,
+      system: buildCullPrompt(intent),
       images,
       textParts,
       maxTokens,
-      cacheSystem: true,
+      // Intent-aware prompt varies per cull — disable system-prompt cache so
+      // the cache doesn't lock in whichever intent was hit first.
+      cacheSystem: false,
     });
     return NextResponse.json(response);
   } catch (err: any) {
