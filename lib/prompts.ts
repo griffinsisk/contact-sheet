@@ -143,7 +143,7 @@ const CULL_JSON_TAIL = `Respond ONLY with valid JSON (no markdown, no backticks,
       "score": 72,
       "rating": "SELECT",
       "scores": { "impact": 70, "composition": 78, "rawQuality": 82, "craftExecution": 75, "story": 65 },
-      "reason": "One concise sentence — what makes this a keeper or a cut, referencing intent where relevant"
+      "reason": "One concise sentence — what makes this a keeper or a cut. When CRAFT is reduced, name the specific issue (missed focus, motion blur on subject, camera shake, flat framing). When STORY is reduced, say what the frame is missing (no decisive moment, no subject doing anything, mood only). Don't be generic — point to what's actually in the frame."
     }
   ]
 }`;
