@@ -20,3 +20,9 @@ node_modules/
 
 # Archives / handoff bundles
 *.zip
+
+# Personal/test data (taste-test-sets, testing-photos, testing-keys, etc.)
+_personal/
+
+# Local Claude Code config
+.claude/
