@@ -113,21 +113,35 @@ Focus on traits that appear consistently across the set:
 - Subject distance (intimate close vs expansive wide)
 - What they AVOID (sterile, clinical, over-styled, posed, etc.)
 
-DO NOT describe genre ("they shoot landscapes and portraits") — that's obvious from the set and doesn't describe taste.
-DO NOT generalize into vague marketing language ("moody, cinematic, atmospheric"). Be specific and grounded in what you actually see.
-DO NOT exceed the evidence. If the set is small, mixed, or incoherent, SAY SO honestly — don't fabricate consistency that isn't there.
+Cross-genre breadth is normal and expected — favorites often span landscapes, portraits, wildlife, street, etc. Find the TASTE traits that survive across that breadth. **Genre breadth alone is not incoherence.**
 
-Write 100–150 words in second person ("You consistently frame…", "Your work favors…"). If the set genuinely lacks a coherent aesthetic, open with "This set doesn't show a strong consistent taste yet — " and describe whatever partial patterns exist.
+NON-PHOTOGRAPHIC CONTENT: If a substantial portion of the set is non-photographic (screenshots, memes, illustrations, AI-generated imagery, scanned documents, UI captures), call that out explicitly. Do NOT mine a small photographic minority for a confident taste read — describe surface-level patterns only.
 
-Respond with ONLY the prose. No preamble, no markdown, no quotes around it.`;
+DO NOT describe genre ("they shoot landscapes and portraits") — that's obvious and doesn't describe taste.
+DO NOT generalize into vague marketing language ("moody, cinematic, atmospheric"). Be specific and grounded in what you see.
+DO NOT exceed the evidence. Reserve disclaimer for sets where taste traits genuinely don't survive, OR where non-photographic content dominates.
 
-const TAGS_PROMPT = `Read the prose below describing a photographer's taste. Extract 4–8 aestheticTags — short snake_case strings that a downstream system will use as scoring context.
+Write 100–150 words in second person ("You consistently frame…", "Your work favors…"). Lead with the strongest pattern. Only if taste traits don't survive (or non-photo content dominates), open with "This set doesn't show consistent taste signal yet — " and describe partial patterns.
+
+After your prose, on a final separate line, output exactly one of these markers:
+[COHERENCE: high]    — strong consistent taste signal across the set; ship a confident profile
+[COHERENCE: medium]  — some patterns survive but evidence is partial; tags should be conservative
+[COHERENCE: low]     — set lacks taste signal, dominated by non-photographic content, or photographic minority too small for reliable read
+
+Respond with ONLY the prose followed by the marker line. No preamble, no markdown, no quotes.`;
+
+const TAGS_PROMPT = `Read the prose below describing a photographer's taste. The prose ends with a marker line of the form \`[COHERENCE: high|medium|low]\`.
+
+Coherence rule (mandatory — overrides everything else):
+- \`[COHERENCE: low]\` → return an empty array. Not enough signal to ship tags.
+- \`[COHERENCE: medium]\` → return 2–4 conservative tags only — the broadest, best-supported observations.
+- \`[COHERENCE: high]\` → return 4–8 specific tags.
+
+Tag style: short snake_case strings a downstream system uses as scoring context.
 
 Good tags: warm_tones, tight_crops, candid_over_posed, shallow_dof, high_contrast, natural_light, negative_space_heavy, centered_composition, muted_palette, hard_shadows, environmental_portrait, intimate_distance.
 
-Bad tags: cinematic (too vague), moody (marketing), good_light (not a preference), photojournalist (genre not taste), artistic (useless).
-
-If the prose says the set lacks coherence, return an empty array.
+Bad tags: cinematic (vague), moody (marketing), good_light (not a preference), photojournalist (genre not taste), artistic (useless).
 
 Respond ONLY with valid JSON (no markdown, no backticks):
 {"aestheticTags": ["tag_one", "tag_two"]}`;
@@ -222,11 +236,16 @@ async function main() {
   console.log("\n── TAGS ──");
   console.log(JSON.stringify(parsed.aestheticTags, null, 2));
 
+  const coherenceMatch = prose.match(/\[COHERENCE:\s*(high|medium|low)\]/i);
+  const coherence = coherenceMatch ? coherenceMatch[1].toLowerCase() : "(missing)";
+
   console.log("\n── QUICK-READ ──");
-  console.log(`Label:    ${label}`);
-  console.log(`Photos:   ${files.length}`);
-  console.log(`Tags:     ${parsed.aestheticTags.join(", ")}`);
-  console.log(`Prose len: ${prose.length} chars\n`);
+  console.log(`Label:      ${label}`);
+  console.log(`Photos:     ${files.length}`);
+  console.log(`Coherence:  ${coherence}`);
+  console.log(`Tag count:  ${parsed.aestheticTags.length}`);
+  console.log(`Tags:       ${parsed.aestheticTags.join(", ") || "(none)"}`);
+  console.log(`Prose len:  ${prose.length} chars\n`);
 }
 
 main().catch(err => {
