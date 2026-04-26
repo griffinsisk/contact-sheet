@@ -5,6 +5,7 @@ import { Photo, CullResult, DeepResult, Rating, ProviderConfig } from "@/lib/typ
 import { formatExifLine, formatExifCamera } from "@/lib/exif";
 import { SCORE_DIMENSIONS } from "@/lib/constants";
 import { runResolutionTest } from "@/lib/api";
+import TasteStarButton from "./TasteStarButton";
 
 interface Props {
   photo: Photo | null;
@@ -64,15 +65,18 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
       style={{ boxShadow: "-20px 0 60px -15px rgba(0,0,0,0.8)", animation: "slideInRight 0.3s ease" }}
     >
       <div className="p-8">
-        {/* Back button */}
-        <button
-          onClick={onClose}
-          aria-label="Close detail panel"
-          className="flex items-center gap-2 mb-6 text-on-surface-variant hover:text-primary transition-colors group"
-        >
-          <span className="material-symbols-outlined text-[18px] group-hover:-translate-x-0.5 transition-transform">arrow_back</span>
-          <span className="font-label text-[10px] uppercase tracking-widest">Back to grid</span>
-        </button>
+        {/* Back button + favorite */}
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={onClose}
+            aria-label="Close detail panel"
+            className="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors group"
+          >
+            <span className="material-symbols-outlined text-[18px] group-hover:-translate-x-0.5 transition-transform">arrow_back</span>
+            <span className="font-label text-[10px] uppercase tracking-widest">Back to grid</span>
+          </button>
+          {!analysis && <TasteStarButton photo={photo} rating={null} />}
+        </div>
 
         {/* Header */}
         <div className="mb-8">
@@ -123,11 +127,14 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
               <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">
                 {ratingOverride ? "YOUR RATING" : "AI RATING"}
               </span>
-              {ratingOverride && (
-                <span className="font-label text-[9px] text-on-surface-variant/60 uppercase tracking-widest">
-                  AI: {analysis.rating}
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {ratingOverride && (
+                  <span className="font-label text-[9px] text-on-surface-variant/60 uppercase tracking-widest">
+                    AI: {analysis.rating}
+                  </span>
+                )}
+                <TasteStarButton photo={photo} rating={ratingOverride ?? analysis.rating} />
+              </div>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {RATING_OPTIONS.map(({ rating, color, activeColor }) => {

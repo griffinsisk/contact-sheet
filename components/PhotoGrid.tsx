@@ -2,6 +2,7 @@
 
 import { Photo, CullResult, DeepResult, Rating } from "@/lib/types";
 import { formatExifLine } from "@/lib/exif";
+import TasteStarButton from "./TasteStarButton";
 
 type Phase = "empty" | "uploading" | "ready" | "culling" | "culled" | "reviewing" | "reviewed";
 
@@ -121,6 +122,14 @@ export default function PhotoGrid({
                   </div>
                 </div>
               )}
+
+              {/* Favorite star */}
+              <div
+                className="absolute top-0 right-0 pt-14 pr-3"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <TasteStarButton photo={photo} rating={rating ?? null} size="sm" className="glass-loupe w-7 h-7 flex items-center justify-center" />
+              </div>
 
               {/* Deep review toggle (after cull) */}
               {(phase === "culled") && cull && (
