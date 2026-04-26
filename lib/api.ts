@@ -9,6 +9,8 @@ type ProgressFn = (message: string, batch: number, total: number) => void;
 
 type ProxyEndpoint = "cull" | "deep-review" | "compare";
 
+type TasteProfileArg = { prose: string; aestheticTags: string[] } | null;
+
 interface ApiCallArgs {
   /** When null, the call is proxied through /api/{endpoint} (free/pro tiers). */
   config: ProviderConfig | null;
@@ -63,6 +65,7 @@ export async function runCull(
   config: ProviderConfig | null,
   intent: SessionIntent | null,
   onProgress?: ProgressFn,
+  profile: TasteProfileArg = null,
 ): Promise<Record<number, CullResult>> {
   const allResults: Record<number, CullResult> = {};
   const batches: { photo: Photo; globalIndex: number }[][] = [];
@@ -88,11 +91,14 @@ export async function runCull(
     const response = await dispatchApiCall({
       config,
       endpoint: "cull",
-      system: buildCullPrompt(intent),
+      system: buildCullPrompt(intent, profile),
       images,
       textParts,
       maxTokens: 4096,
-      extraBody: intent ? { intent } : undefined,
+      extraBody: {
+        ...(intent ? { intent } : {}),
+        ...(profile ? { profile } : {}),
+      },
     });
 
     const parsed = parseJSON(response.text, response.truncated) as CullResponse;
@@ -114,6 +120,7 @@ export async function runDeepReview(
   level: ExperienceLevel = "enthusiast",
   intent: SessionIntent | null = null,
   onProgress?: ProgressFn,
+  profile: TasteProfileArg = null,
 ): Promise<{
   analyses: Record<number, DeepResult>;
   curatorialNotes: string | null;
@@ -131,7 +138,7 @@ export async function runDeepReview(
 
   // For direct/BYOK: compose the full prompt here. For proxy: the server
   // re-composes using the same constants plus the `level` + `intent` in extraBody.
-  const systemPrompt = buildDeepReviewPrompt(intent) + (EXPERIENCE_VOICE[level] || EXPERIENCE_VOICE.enthusiast);
+  const systemPrompt = buildDeepReviewPrompt(intent, profile) + (EXPERIENCE_VOICE[level] || EXPERIENCE_VOICE.enthusiast);
 
   for (let bi = 0; bi < batches.length; bi++) {
     const batch = batches[bi];
@@ -153,7 +160,11 @@ export async function runDeepReview(
       images,
       textParts,
       maxTokens: 16384,
-      extraBody: intent ? { level, intent } : { level },
+      extraBody: {
+        level,
+        ...(intent ? { intent } : {}),
+        ...(profile ? { profile } : {}),
+      },
     });
 
     const parsed = parseJSON(response.text, response.truncated) as DeepResponse;

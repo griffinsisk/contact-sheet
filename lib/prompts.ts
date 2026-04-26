@@ -51,6 +51,18 @@ const INTENT_CRAFT_RULES: Record<IntentPreset, string> = {
 - When a frame's apparent intent is unclear, grade CRAFT on whether the photographer seemed to land whatever they were attempting.`,
 };
 
+function tasteSection(profile?: { prose: string; aestheticTags: string[] } | null): string {
+  if (!profile || profile.aestheticTags.length === 0) return "";
+  const tags = profile.aestheticTags.join(", ");
+  return `\nPHOTOGRAPHER TASTE (apply as context, not override):
+Tags: ${tags}
+Prose: "${profile.prose}"
+
+Use these as soft bias when reading IMPACT and COMPOSITION. A frame that
+matches this taste reads as intentional; one that doesn't is fine to score
+on its own merits. Session intent still governs CRAFT thresholds.\n`;
+}
+
 function intentSection(intent: SessionIntent | null): string {
   if (!intent) {
     // No intent signal — fall back to mixed-style per-frame inference.
@@ -148,8 +160,11 @@ const CULL_JSON_TAIL = `Respond ONLY with valid JSON (no markdown, no backticks,
   ]
 }`;
 
-export function buildCullPrompt(intent: SessionIntent | null): string {
-  return `${CULL_BASE}\n${intentSection(intent)}\n${RUBRIC_BODY}\n\n${CULL_JSON_TAIL}`;
+export function buildCullPrompt(
+  intent: SessionIntent | null,
+  profile?: { prose: string; aestheticTags: string[] } | null,
+): string {
+  return `${CULL_BASE}\n${tasteSection(profile)}${intentSection(intent)}\n${RUBRIC_BODY}\n\n${CULL_JSON_TAIL}`;
 }
 
 /** Legacy export — callers that don't plumb intent get the mixed/per-frame fallback. */
@@ -192,8 +207,11 @@ VOICE:
 - Titles should be evocative — what you'd scribble on the back of a print.
 - Curatorial notes: like talking over coffee about what you see across the set.`;
 
-export function buildDeepReviewPrompt(intent: SessionIntent | null): string {
-  return `${DEEP_BASE}\n${intentSection(intent)}\n${RUBRIC_BODY}\n\n${DEEP_JSON_TAIL}`;
+export function buildDeepReviewPrompt(
+  intent: SessionIntent | null,
+  profile?: { prose: string; aestheticTags: string[] } | null,
+): string {
+  return `${DEEP_BASE}\n${tasteSection(profile)}${intentSection(intent)}\n${RUBRIC_BODY}\n\n${DEEP_JSON_TAIL}`;
 }
 
 /** Legacy export — callers that don't plumb intent get the mixed fallback. */

@@ -26,6 +26,17 @@ function coerceIntent(raw: unknown): SessionIntent | null {
   return { preset: preset as IntentPreset, freeForm };
 }
 
+type ProfilePayload = { prose: string; aestheticTags: string[] };
+
+function coerceProfile(raw: unknown): ProfilePayload | null | "invalid" {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "object") return "invalid";
+  const r = raw as Record<string, unknown>;
+  if (typeof r.prose !== "string") return "invalid";
+  if (!Array.isArray(r.aestheticTags) || !r.aestheticTags.every(t => typeof t === "string")) return "invalid";
+  return { prose: r.prose, aestheticTags: r.aestheticTags as string[] };
+}
+
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -53,9 +64,17 @@ export async function POST(req: NextRequest) {
 
   const intent = coerceIntent(body?.intent);
 
+  const profile = coerceProfile(body?.profile);
+  if (profile === "invalid") {
+    return NextResponse.json(
+      { error: "profile must be { prose: string, aestheticTags: string[] }" },
+      { status: 400 },
+    );
+  }
+
   try {
     const response = await callProvider("anthropic", apiKey, model, {
-      system: buildCullPrompt(intent),
+      system: buildCullPrompt(intent, profile),
       images,
       textParts,
       maxTokens,
