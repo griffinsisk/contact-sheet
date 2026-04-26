@@ -1,4 +1,3 @@
-import { clerkClient } from "@clerk/nextjs/server";
 import type { Rating } from "./types";
 
 export interface TasteEntry {
@@ -63,23 +62,6 @@ export function setTasteLibraryClient(library: TasteLibrary): void {
   if (typeof window === "undefined") return;
   const next = evictFifo(library);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-}
-
-export async function getTasteLibraryServer(clerkUserId: string): Promise<TasteLibrary> {
-  const client = await clerkClient();
-  const user = await client.users.getUser(clerkUserId);
-  const stored = user.publicMetadata?.tasteLibrary as TasteLibrary | undefined;
-  if (!stored || stored.version !== 1 || !Array.isArray(stored.entries)) return emptyLibrary();
-  return stored;
-}
-
-export async function setTasteLibraryServer(clerkUserId: string, library: TasteLibrary): Promise<void> {
-  const client = await clerkClient();
-  const user = await client.users.getUser(clerkUserId);
-  const next = evictFifo(library);
-  await client.users.updateUser(clerkUserId, {
-    publicMetadata: { ...user.publicMetadata, tasteLibrary: next },
-  });
 }
 
 // Hash downsized pixels (not file bytes) so re-saves of the same image hash identically.
