@@ -4,7 +4,7 @@
  * original files are copied byte-for-byte, never re-encoded.
  */
 
-import { Photo, CullResult, DeepResult } from "./types";
+import { Photo, CullResult, DeepResult, Rating } from "./types";
 import { generateXMP, sanitizeFilename } from "./exports";
 
 /** Check if the File System Access API is available */
@@ -16,7 +16,7 @@ interface ExportOptions {
   photos: Photo[];
   cullResults: Record<number, CullResult>;
   deepResults: Record<number, DeepResult>;
-  ratingOverrides?: Record<number, string>;
+  ratingOverrides?: Record<number, Rating>;
   recommendedSequence: number[] | null;
   renameFiles?: boolean;
   onProgress?: (msg: string) => void;
@@ -80,8 +80,9 @@ export async function exportToFolder(opts: ExportOptions): Promise<number> {
     const cull = cullResults[i];
     if (!cull) continue;
     const deep = deepResults[i];
+    const override = ratingOverrides?.[i];
     const baseName = photos[i].name.replace(/\.[^.]+$/, "");
-    const xmp = generateXMP(photos[i].name, cull, deep);
+    const xmp = generateXMP(photos[i].name, cull, deep, override);
     await writeTextFile(rootDir, `${baseName}.xmp`, xmp);
     written++;
     onProgress?.(`XMP sidecars: ${written}/${total}`);

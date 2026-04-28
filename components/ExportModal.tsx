@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Photo, CullResult, DeepResult } from "@/lib/types";
+import { Photo, CullResult, DeepResult, Rating } from "@/lib/types";
 import { generateXMP, generateOrgScript, generateManifest, downloadFile } from "@/lib/exports";
 import { hasFileSystemAccess, exportToFolder } from "@/lib/fs-export";
 
@@ -9,12 +9,13 @@ interface Props {
   photos: Photo[];
   cullResults: Record<number, CullResult>;
   deepResults: Record<number, DeepResult>;
+  ratingOverrides: Record<number, Rating>;
   curatorialNotes: string | null;
   recommendedSequence: number[] | null;
   onClose: () => void;
 }
 
-export default function ExportModal({ photos, cullResults, deepResults, curatorialNotes, recommendedSequence, onClose }: Props) {
+export default function ExportModal({ photos, cullResults, deepResults, ratingOverrides, curatorialNotes, recommendedSequence, onClose }: Props) {
   const [renameFiles, setRenameFiles] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
@@ -37,6 +38,7 @@ export default function ExportModal({ photos, cullResults, deepResults, curatori
         photos,
         cullResults,
         deepResults,
+        ratingOverrides,
         recommendedSequence,
         renameFiles,
         onProgress: setExportProgress,
@@ -60,20 +62,20 @@ export default function ExportModal({ photos, cullResults, deepResults, curatori
     photos.forEach((p, i) => {
       const cull = cullResults[i];
       if (!cull) return;
-      const xmp = generateXMP(p.name, cull, deepResults[i]);
+      const xmp = generateXMP(p.name, cull, deepResults[i], ratingOverrides[i]);
       downloadFile(xmp, `${p.name.replace(/\.[^.]+$/, "")}.xmp`, "application/xml");
     });
   };
 
   const downloadScript = () => {
     const { content, filename } = generateOrgScript(
-      photos, cullResults, deepResults, recommendedSequence, "unix", renameFiles,
+      photos, cullResults, deepResults, recommendedSequence, "unix", renameFiles, ratingOverrides,
     );
     downloadFile(content, filename);
   };
 
   const downloadManifest = () => {
-    const manifest = generateManifest(photos, cullResults, deepResults, curatorialNotes, recommendedSequence);
+    const manifest = generateManifest(photos, cullResults, deepResults, curatorialNotes, recommendedSequence, ratingOverrides);
     downloadFile(manifest, "contact-sheet-manifest.txt");
   };
 
