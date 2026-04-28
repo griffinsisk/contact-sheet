@@ -17,6 +17,17 @@ interface Props {
   onClose: () => void;
 }
 
+type ProfileAlignment = "aligned" | "diverged" | "neutral";
+
+function detectProfileAlignment(note: string): ProfileAlignment | null {
+  if (!note) return null;
+  const lower = note.toLowerCase();
+  if (lower.includes("aligns with your library")) return "aligned";
+  if (lower.includes("diverges from your library")) return "diverged";
+  if (lower.includes("outside your library")) return "neutral";
+  return null;
+}
+
 const RATING_OPTIONS: { rating: Rating; color: string; activeColor: string }[] = [
   { rating: "HERO", color: "text-primary", activeColor: "bg-primary text-on-primary" },
   { rating: "SELECT", color: "text-secondary", activeColor: "bg-secondary text-on-secondary" },
@@ -222,6 +233,26 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
             <h3 className="font-label text-[11px] text-on-surface-variant border-l-2 border-primary/40 pl-3 mb-4 uppercase tracking-widest">
               CULL NOTE
             </h3>
+            {(() => {
+              const alignment = detectProfileAlignment(cull.reason);
+              if (!alignment) return null;
+              const badgeStyles = {
+                aligned: "bg-primary/15 text-primary border-primary/40",
+                diverged: "bg-tertiary/15 text-tertiary border-tertiary/40",
+                neutral: "bg-surface-highest text-on-surface-variant border-outline-variant",
+              } as const;
+              const labels = {
+                aligned: "Aligns with your library",
+                diverged: "Diverges from your library",
+                neutral: "Outside your library's strong traits",
+              } as const;
+              return (
+                <div className={`inline-flex items-center gap-1.5 mb-3 px-2.5 py-1 border font-label text-[10px] uppercase tracking-widest ${badgeStyles[alignment]}`}>
+                  <span className="material-symbols-outlined text-[14px]">palette</span>
+                  {labels[alignment]}
+                </div>
+              );
+            })()}
             <p className="font-body text-sm text-on-surface/80 leading-relaxed">
               {cull.reason}
             </p>

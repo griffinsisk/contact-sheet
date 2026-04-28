@@ -7,6 +7,8 @@ import {
   ExperienceLevel, CompareResponse, SessionSummary, IntentPreset,
 } from "@/lib/types";
 import { runCull, runDeepReview, runCompare } from "@/lib/api";
+import { useTasteLibrary } from "@/hooks/useTasteLibrary";
+import { generateTasteProfile } from "@/lib/taste-library";
 import { loadSessionIntent, saveSessionIntent } from "@/lib/session-intent";
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "@/lib/constants";
 import { resolveTier, canProcessPhotos, incrementFreeUsage, getFreeUsage } from "@/lib/tier";
@@ -29,6 +31,7 @@ import CullProgress from "./CullProgress";
 import IntentPicker from "./IntentPicker";
 import CompareModal from "./CompareModal";
 import ExportModal from "./ExportModal";
+import SessionsModal from "./SessionsModal";
 
 type Phase = "empty" | "uploading" | "ready" | "culling" | "culled" | "reviewing" | "reviewed";
 
@@ -36,6 +39,9 @@ export default function ContactSheet() {
   // Clerk — publicMetadata.tier is set by Stripe webhook
   const { user } = useUser();
   const isPro = user?.publicMetadata?.tier === "pro";
+
+  // Taste library (Pro-only profile injection — soft bias under intent)
+  const { library: tasteLibrary, setProfile: setTasteProfile, setLastRegenAt: setTasteLastRegenAt } = useTasteLibrary();
 
   // Provider
   const [config, setConfig] = useState<ProviderConfig | null>(() => loadProviderConfig());
@@ -54,6 +60,9 @@ export default function ContactSheet() {
   // Session intent (sticky per browser tab via sessionStorage)
   const [intentPreset, setIntentPreset] = useState<IntentPreset | null>(null);
   const [intentFreeForm, setIntentFreeForm] = useState<string>("");
+
+  // Per-cull opt-out from taste profile (resets after each cull starts)
+  const [ignoreTasteProfile, setIgnoreTasteProfile] = useState(false);
 
   // Hydrate intent from sessionStorage after mount (avoids SSR hydration mismatch)
   useEffect(() => {
@@ -84,6 +93,7 @@ export default function ContactSheet() {
   const [compareLoading, setCompareLoading] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0);
   const processingFiles = useRef(false);
@@ -170,6 +180,32 @@ export default function ContactSheet() {
     processingFiles.current = false;
   }, [cullResults]);
 
+  // ── Auto-regen taste profile (fire-and-forget) ─────────────────────────
+
+  const maybeAutoRegenProfile = useCallback(() => {
+    if (!isPro) return;
+    const usable = tasteLibrary.entries.filter(e => !!e.image);
+    const FLOOR = 8;
+    const DELTA_TRIGGER = 5;
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    if (usable.length < FLOOR) return;
+    const baseline = tasteLibrary.currentProfile?.generatedFromEntryCount ?? 0;
+    const delta = usable.length - baseline;
+    if (delta < DELTA_TRIGGER) return;
+    const last = tasteLibrary.lastRegenAt ?? 0;
+    if (Date.now() - last < SEVEN_DAYS) return;
+
+    // Fire-and-forget; don't block the cull.
+    generateTasteProfile(tasteLibrary)
+      .then(({ profile }) => {
+        if (profile) setTasteProfile(profile);
+        setTasteLastRegenAt(Date.now());
+      })
+      .catch((err) => {
+        console.warn("Auto-regen taste profile failed:", err?.message || err);
+      });
+  }, [isPro, tasteLibrary, setTasteProfile, setTasteLastRegenAt]);
+
   // ── Cull ────────────────────────────────────────────────────────────────
 
   const startCull = useCallback(async (photosToProcess?: Photo[]) => {
@@ -193,15 +229,21 @@ export default function ContactSheet() {
     setCuratorialNotes(null);
     setRecommendedSequence(null);
 
+    // Auto-regen taste profile if drift threshold + throttle allow (fire-and-forget).
+    maybeAutoRegenProfile();
+
     try {
       const effectiveIntent = intentPreset
         ? { preset: intentPreset, freeForm: intentFreeForm.trim() || undefined }
         : { preset: "mixed" as IntentPreset };
+      const profile = !ignoreTasteProfile && tasteLibrary.currentProfile
+        ? { prose: tasteLibrary.currentProfile.prose, aestheticTags: tasteLibrary.currentProfile.aestheticTags }
+        : null;
       const results = await runCull(target, config, effectiveIntent, (msg, batch, total) => {
         setProgressMsg(msg);
         setProgressPct(Math.round(((batch + 1) / total) * 100));
         setProgressDone(Math.min(batch * CULL_BATCH_SIZE, target.length));
-      });
+      }, profile);
       setProgressDone(target.length);
       setCullResults(results);
       if (tier === "free") incrementFreeUsage(target.length);
@@ -225,13 +267,18 @@ export default function ContactSheet() {
       setPhase(Object.keys(cullResults).length > 0 ? "culled" : "empty");
       setProgressMsg("");
     }
-  }, [config, photos, isPro, intentPreset, intentFreeForm]);
+  }, [config, photos, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, ignoreTasteProfile, maybeAutoRegenProfile]);
 
   // ── Deep review ─────────────────────────────────────────────────────────
 
   const startDeepReview = useCallback(async () => {
     const indices = Array.from(deepSelected).sort((a, b) => a - b);
     if (indices.length === 0) return;
+
+    if (indices.some(i => !photos[i]?.base64)) {
+      setError("Restored sessions can't run new deep review — re-import the originals.");
+      return;
+    }
 
     const tier = resolveTier(config, isPro);
     const gate = canProcessPhotos(tier, indices.length);
@@ -250,12 +297,15 @@ export default function ContactSheet() {
       const effectiveIntent = intentPreset
         ? { preset: intentPreset, freeForm: intentFreeForm.trim() || undefined }
         : { preset: "mixed" as IntentPreset };
+      const profile = !ignoreTasteProfile && tasteLibrary.currentProfile
+        ? { prose: tasteLibrary.currentProfile.prose, aestheticTags: tasteLibrary.currentProfile.aestheticTags }
+        : null;
       const { analyses, curatorialNotes: notes, recommendedSequence: seq } =
         await runDeepReview(photos, indices, config, level, effectiveIntent, (msg, batch, total) => {
           setProgressMsg(msg);
           setProgressPct(Math.round(((batch + 1) / total) * 100));
           setProgressDone(Math.min(batch * DEEP_BATCH_SIZE, indices.length));
-        });
+        }, profile);
       setProgressDone(indices.length);
 
       setDeepResults(analyses);
@@ -272,7 +322,7 @@ export default function ContactSheet() {
       setPhase("culled");
       setProgressMsg("");
     }
-  }, [config, photos, deepSelected, level, cullResults, isPro, intentPreset, intentFreeForm]);
+  }, [config, photos, deepSelected, level, cullResults, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, ignoreTasteProfile]);
 
   // ── Compare ─────────────────────────────────────────────────────────────
 
@@ -286,6 +336,11 @@ export default function ContactSheet() {
 
   const startCompare = useCallback(async () => {
     if (compareSelected.length !== 2) return;
+
+    if (compareSelected.some(i => !photos[i]?.base64)) {
+      setError("Restored sessions can't run new compare — re-import the originals.");
+      return;
+    }
 
     const tier = resolveTier(config, isPro);
     const gate = canProcessPhotos(tier, 2);
@@ -461,6 +516,7 @@ export default function ContactSheet() {
   // ── Toolbar area (shown when photos exist) ─────────────────────────────
 
   const showToolbar = photos.length > 0 && phase !== "empty" && phase !== "uploading" && phase !== "ready";
+  const isRestoredSession = photos.length > 0 && photos.every(p => p.isRestored);
   // Effective rating = override > deep > cull
   const getEffectiveRating = (index: number) => {
     if (ratingOverrides[index]) return ratingOverrides[index];
@@ -512,7 +568,7 @@ export default function ContactSheet() {
   return (
     <div className="flex h-screen overflow-hidden">
       <Header
-        onHistory={() => {}}
+        onHistory={() => setShowSessions(true)}
         onSettings={() => setShowSettings(true)}
         onAddFiles={() => fileInputRef.current?.click()}
       />
@@ -650,6 +706,24 @@ export default function ContactSheet() {
                 onPresetChange={handleIntentPreset}
                 onFreeFormChange={handleIntentFreeForm}
               />
+              {tasteLibrary.currentProfile && (
+                <label className="flex items-start gap-3 mt-4 pt-4 border-t border-outline-variant cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={ignoreTasteProfile}
+                    onChange={(e) => setIgnoreTasteProfile(e.target.checked)}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <div>
+                    <div className="font-label text-[11px] text-on-surface uppercase tracking-widest mb-1">
+                      Cull this shoot without my taste profile
+                    </div>
+                    <div className="font-body text-[12px] text-on-surface-variant">
+                      Use when this shoot is intentionally outside your usual style. Your library and profile stay intact.
+                    </div>
+                  </div>
+                </label>
+              )}
             </div>
           </div>
         )}
@@ -670,7 +744,7 @@ export default function ContactSheet() {
                   <span className="text-secondary font-bold">{selectCount}</span>
                 </div>
               )}
-              {compareSelected.length === 2 && (
+              {compareSelected.length === 2 && !isRestoredSession && (
                 <button
                   onClick={startCompare}
                   className="flex items-center gap-2 font-label text-[10px] uppercase tracking-widest bg-primary text-on-primary px-3 py-2 hover:bg-primary-dim transition-colors"
@@ -764,7 +838,11 @@ export default function ContactSheet() {
 
         {/* Cull banner — always show after cull so user can trigger deep review */}
         {phase === "culled" && (
-          <CullBanner deepCount={deepSelected.size} onStartDeepReview={startDeepReview} />
+          <CullBanner
+            deepCount={deepSelected.size}
+            onStartDeepReview={startDeepReview}
+            isRestored={isRestoredSession}
+          />
         )}
 
         {/* Curatorial notes banner (after deep review) */}
@@ -828,9 +906,19 @@ export default function ContactSheet() {
           photos={photos}
           cullResults={cullResults}
           deepResults={deepResults}
+          ratingOverrides={ratingOverrides}
           curatorialNotes={curatorialNotes}
           recommendedSequence={recommendedSequence}
           onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {/* Sessions / history modal */}
+      {showSessions && (
+        <SessionsModal
+          sessions={sessions}
+          onRestore={handleRestoreSession}
+          onClose={() => setShowSessions(false)}
         />
       )}
     </div>
