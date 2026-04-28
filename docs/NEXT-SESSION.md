@@ -1,15 +1,33 @@
-# Next Session — Phase B Validated + Tuned, Pre-Merge
+# Next Session — Phase B Pre-Merge, Preview Live
 
-**Branch:** `feature/taste-library`. After this session's commits, all work is recorded; ready for PR to `main`.
+**Branch:** `feature/taste-library` at `7a2f83a` (pushed to origin).
 **Prod:** still Phase A at https://contact-sheet-three.vercel.app.
-**State:** Phase B implemented, validation 4-of-4 PASS, off-intent variance tuned, opt-out + alignment indicator UI shipped. All work committed.
+**Preview:** Vercel preview deploy `D4LQKGAyJ` is live for `feature/taste-library` (Ready as of 2026-04-28). Find URL via Vercel Deployments → click the entry → Visit.
+
+**State:** Phase B implemented, validation 4-of-4 PASS, off-intent variance tuned, opt-out + alignment indicator UI shipped. All work committed and pushed. Preview deploy ready for end-to-end test before merging to main.
+
+## Pickup point
+
+1. **Test the preview deploy.** Open the Vercel preview URL, sign in as Pro, run through:
+   - Seed 8–20 favorites; confirm profile auto-generates.
+   - Cull a shoot; confirm alignment indicator badge renders above cull notes.
+   - Toggle "Cull this shoot without my taste profile" checkbox; confirm score reverts to rubric-only.
+   - History button → SessionsModal opens.
+   - Export with ratingOverrides applied; confirm exports reflect the override.
+2. **If preview looks good, open PR + merge:**
+   ```bash
+   gh pr create --base main --head feature/taste-library --title "Phase B: Taste Library"
+   ```
+   Body: see prepared body in conversation handoff or write fresh referencing `docs/PHASE-B-TEST-RESULTS.md`.
+3. **Merge the PR on GitHub.** Vercel auto-deploys `main` to https://contact-sheet-three.vercel.app.
+4. **Post-merge verify:** sign in to prod, smoke-test seed → cull → alignment indicator.
 
 ## First 3 minutes — verify state
 
 ```bash
 cd "/Users/griffin.sisk/Desktop/AI Projects/contact-sheet-repo"
 git status                # clean
-git log --oneline -15     # latest commits visible
+git log --oneline -15     # 7a2f83a at HEAD
 npx tsc --noEmit          # clean
 ```
 
