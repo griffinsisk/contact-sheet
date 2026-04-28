@@ -5,6 +5,8 @@ export interface TasteEntry {
   addedAt: number;
   originalRating?: Rating;
   rescued?: boolean;
+  /** 512px JPEG, base64, no data: prefix. Required for profile generation. */
+  image?: string;
 }
 
 export interface TasteProfile {
@@ -62,6 +64,54 @@ export function setTasteLibraryClient(library: TasteLibrary): void {
   if (typeof window === "undefined") return;
   const next = evictFifo(library);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+}
+
+/**
+ * Generate a taste profile from the entries in the library that carry an image.
+ * Hash-only entries are ignored — they have no signal for the model.
+ */
+export async function generateTasteProfile(
+  library: TasteLibrary,
+): Promise<{
+  profile: TasteProfile | null;
+  coherence: "high" | "medium" | "low";
+  usedEntryCount: number;
+}> {
+  const usable = library.entries.filter((e) => !!e.image);
+  if (usable.length < 4) {
+    throw new Error(`Need at least 4 favorites with image data; have ${usable.length}.`);
+  }
+  const payload = {
+    entries: usable.map((e) => ({ photoHash: e.photoHash, image: e.image! })),
+  };
+  const res = await fetch("/api/taste-profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Profile request failed (${res.status})`);
+  }
+  const json = (await res.json()) as {
+    prose: string;
+    aestheticTags: string[];
+    coherence: "high" | "medium" | "low";
+    generatedAt: number;
+  };
+  if (json.coherence === "low" || json.aestheticTags.length === 0) {
+    return { profile: null, coherence: json.coherence, usedEntryCount: usable.length };
+  }
+  return {
+    profile: {
+      prose: json.prose,
+      aestheticTags: json.aestheticTags,
+      generatedAt: json.generatedAt,
+      generatedFromEntryCount: usable.length,
+    },
+    coherence: json.coherence,
+    usedEntryCount: usable.length,
+  };
 }
 
 // Hash downsized pixels (not file bytes) so re-saves of the same image hash identically.

@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { TasteEntry, contentHash } from "@/lib/taste-library";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useUser } from "@clerk/nextjs";
+import { TasteEntry, contentHash, generateTasteProfile, getTasteLibraryClient } from "@/lib/taste-library";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
+
+const REGEN_THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 interface Props {
   onClose: () => void;
@@ -18,7 +21,7 @@ function isValidImage(file: File): boolean {
   return ACCEPT_EXT.test(file.name);
 }
 
-async function downsizeFileTo512(file: File): Promise<Uint8Array> {
+async function downsizeFileTo512(file: File): Promise<{ bytes: Uint8Array; base64: string }> {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -39,20 +42,28 @@ async function downsizeFileTo512(file: File): Promise<Uint8Array> {
       canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/jpeg", 0.7);
     });
     const buf = await blob.arrayBuffer();
-    return new Uint8Array(buf);
+    const bytes = new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return { bytes, base64: btoa(bin) };
   } finally {
     URL.revokeObjectURL(url);
   }
 }
 
 export default function SeedUploadModal({ onClose }: Props) {
-  const { addEntries, library } = useTasteLibrary();
+  const { addEntries, library, setProfile, setLastRegenAt } = useTasteLibrary();
+  const { user } = useUser();
+  const isPro = user?.publicMetadata?.tier === "pro";
   const inputRef = useRef<HTMLInputElement>(null);
   const [staged, setStaged] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hashing, setHashing] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [doneCount, setDoneCount] = useState<number | null>(null);
+  const [profileStatus, setProfileStatus] = useState<"idle" | "generating" | "done" | "skipped" | "error">("idle");
+  const [profileMsg, setProfileMsg] = useState<string | null>(null);
+  const [regenPending, setRegenPending] = useState(false);
 
   const acceptFiles = useCallback((files: File[]) => {
     const valid = files.filter(isValidImage);
@@ -74,13 +85,37 @@ export default function SeedUploadModal({ onClose }: Props) {
     e.preventDefault();
     e.stopPropagation();
     if (hashing) return;
+
     const files: File[] = [];
+    const processEntry = (entry: FileSystemEntry): Promise<void> => {
+      return new Promise((resolve) => {
+        if (entry.isFile) {
+          (entry as FileSystemFileEntry).file((f) => {
+            if (isValidImage(f)) files.push(f);
+            resolve();
+          });
+        } else if (entry.isDirectory) {
+          const reader = (entry as FileSystemDirectoryEntry).createReader();
+          reader.readEntries(async (entries) => {
+            await Promise.all(entries.map(processEntry));
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
+    };
+
     const items = e.dataTransfer.items;
+    const entries: FileSystemEntry[] = [];
     for (let i = 0; i < items.length; i++) {
-      const f = items[i].getAsFile();
-      if (f) files.push(f);
+      const entry = items[i].webkitGetAsEntry();
+      if (entry) entries.push(entry);
     }
-    acceptFiles(files);
+
+    Promise.all(entries.map(processEntry)).then(() => {
+      acceptFiles(files);
+    });
   }, [acceptFiles, hashing]);
 
   const handlePick = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,6 +124,36 @@ export default function SeedUploadModal({ onClose }: Props) {
     acceptFiles(Array.from(list));
     e.target.value = "";
   }, [acceptFiles]);
+
+  const runProfileGeneration = useCallback(async () => {
+    if (!isPro) {
+      setProfileStatus("skipped");
+      setProfileMsg("Pro tier required to generate a taste profile.");
+      return;
+    }
+    setProfileStatus("generating");
+    setProfileMsg(null);
+    try {
+      // Re-read storage to include just-added entries even if hook state hasn't re-rendered yet.
+      const fresh = getTasteLibraryClient();
+      const { profile, coherence, usedEntryCount } = await generateTasteProfile(fresh);
+      if (profile) {
+        setProfile(profile);
+        setLastRegenAt(Date.now());
+        setProfileStatus("done");
+        setProfileMsg(`Profile generated from ${usedEntryCount} favorites.`);
+      } else {
+        setLastRegenAt(Date.now());
+        setProfileStatus("skipped");
+        setProfileMsg(coherence === "low"
+          ? "Set lacks consistent taste signal — no profile generated. Add more cohesive favorites."
+          : "Profile generation returned no usable tags.");
+      }
+    } catch (err: any) {
+      setProfileStatus("error");
+      setProfileMsg(err?.message || "Profile generation failed.");
+    }
+  }, [isPro, library, setProfile, setLastRegenAt]);
 
   const handleConfirm = useCallback(async () => {
     if (staged.length < MIN_FILES) {
@@ -108,10 +173,10 @@ export default function SeedUploadModal({ onClose }: Props) {
       for (let i = 0; i < staged.length; i++) {
         const file = staged[i];
         try {
-          const bytes = await downsizeFileTo512(file);
+          const { bytes, base64 } = await downsizeFileTo512(file);
           const hash = await contentHash(bytes);
           if (!existing.has(hash) && !entries.some((e) => e.photoHash === hash)) {
-            entries.push({ photoHash: hash, addedAt: Date.now() });
+            entries.push({ photoHash: hash, addedAt: Date.now(), image: base64 });
           }
         } catch (err) {
           console.error(`Failed to process ${file.name}:`, err);
@@ -124,6 +189,39 @@ export default function SeedUploadModal({ onClose }: Props) {
       setHashing(false);
     }
   }, [staged, library.entries, addEntries]);
+
+  // Auto-trigger generation right after seeding, once doneCount lands and library has entries-with-images.
+  useEffect(() => {
+    if (doneCount === null) return;
+    if (profileStatus !== "idle") return;
+    const usable = library.entries.filter((e) => !!e.image).length;
+    if (usable < 4) {
+      setProfileStatus("skipped");
+      setProfileMsg(`Need at least 4 favorites with image data; have ${usable}.`);
+      return;
+    }
+    runProfileGeneration();
+  }, [doneCount, profileStatus, library.entries, runProfileGeneration]);
+
+  const handleManualRegen = useCallback(async () => {
+    if (regenPending) return;
+    const last = library.lastRegenAt ?? 0;
+    if (Date.now() - last < REGEN_THROTTLE_MS) {
+      const wait = Math.ceil((REGEN_THROTTLE_MS - (Date.now() - last)) / (60 * 60 * 1000));
+      setProfileStatus("error");
+      setProfileMsg(`Manual regen throttled — try again in ~${wait}h.`);
+      return;
+    }
+    setRegenPending(true);
+    try {
+      await runProfileGeneration();
+    } finally {
+      setRegenPending(false);
+    }
+  }, [regenPending, library.lastRegenAt, runProfileGeneration]);
+
+  const usableEntryCount = library.entries.filter((e) => !!e.image).length;
+  const canManualRegen = isPro && usableEntryCount >= 4 && doneCount === null;
 
   const stagedValid = staged.length >= MIN_FILES && staged.length <= MAX_FILES;
 
@@ -173,6 +271,35 @@ export default function SeedUploadModal({ onClose }: Props) {
                 </p>
               )}
             </div>
+
+            {/* Profile generation status */}
+            {profileStatus === "generating" && (
+              <div className="p-5 bg-surface-low border-l-2 border-primary flex items-center gap-3">
+                <div className="w-4 h-4 border-2 border-primary border-t-transparent animate-spin" />
+                <span className="font-label text-[11px] text-on-surface uppercase tracking-widest">
+                  Generating taste profile…
+                </span>
+              </div>
+            )}
+            {profileStatus === "done" && (
+              <div className="p-5 bg-surface-low border-l-2 border-primary">
+                <div className="font-label text-[11px] text-primary uppercase tracking-widest mb-2 font-bold">
+                  Taste profile ready
+                </div>
+                <p className="font-body text-sm text-on-surface/80">{profileMsg}</p>
+              </div>
+            )}
+            {profileStatus === "skipped" && (
+              <div className="p-5 bg-surface-low border-l-2 border-outline-variant">
+                <p className="font-body text-sm text-on-surface-variant">{profileMsg}</p>
+              </div>
+            )}
+            {profileStatus === "error" && (
+              <div className="p-5 bg-error/10 border-l-2 border-error">
+                <p className="font-body text-sm text-error">{profileMsg}</p>
+              </div>
+            )}
+
             <button
               onClick={onClose}
               className="w-full bg-primary text-on-primary py-4 mono-label font-bold text-sm tracking-widest hover:brightness-110 active:scale-[0.98] transition-all"
@@ -268,6 +395,42 @@ export default function SeedUploadModal({ onClose }: Props) {
                 {hashing ? "ADDING…" : "ADD TO LIBRARY"}
               </button>
             </div>
+
+            {/* Manual regen — only when library already has usable entries and Pro */}
+            {canManualRegen && (
+              <div className="mt-6 pt-6 border-t border-outline-variant/30">
+                <div className="flex justify-between items-center mb-3">
+                  <div>
+                    <div className="font-label text-[11px] text-on-surface uppercase tracking-widest font-bold">
+                      Existing profile
+                    </div>
+                    <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
+                      {library.currentProfile
+                        ? `${library.currentProfile.aestheticTags.length} tags · from ${library.currentProfile.generatedFromEntryCount} favorites`
+                        : "No profile yet"}
+                      {library.lastRegenAt && ` · last run ${new Date(library.lastRegenAt).toLocaleDateString()}`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleManualRegen}
+                    disabled={regenPending || profileStatus === "generating"}
+                    className="px-4 py-2 font-label text-[10px] uppercase tracking-widest bg-surface-high text-on-surface hover:bg-surface-bright transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">refresh</span>
+                    {profileStatus === "generating" || regenPending ? "REGENERATING…" : "REGENERATE PROFILE"}
+                  </button>
+                </div>
+                {profileStatus === "done" && profileMsg && (
+                  <p className="font-body text-[11px] text-primary mt-2">{profileMsg}</p>
+                )}
+                {profileStatus === "error" && profileMsg && (
+                  <p className="font-body text-[11px] text-error mt-2">{profileMsg}</p>
+                )}
+                {profileStatus === "skipped" && profileMsg && (
+                  <p className="font-body text-[11px] text-on-surface-variant mt-2">{profileMsg}</p>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

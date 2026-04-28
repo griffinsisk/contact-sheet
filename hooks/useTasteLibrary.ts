@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   TasteEntry,
   TasteLibrary,
+  TasteProfile,
   emptyLibrary,
   getTasteLibraryClient,
   setTasteLibraryClient,
@@ -14,6 +15,8 @@ export interface UseTasteLibrary {
   isFavorited: (photoHash: string) => boolean;
   toggleFavorite: (entry: TasteEntry) => void;
   addEntries: (entries: TasteEntry[]) => void;
+  setProfile: (profile: TasteProfile | null) => void;
+  setLastRegenAt: (ts: number) => void;
 }
 
 export function useTasteLibrary(): UseTasteLibrary {
@@ -56,5 +59,27 @@ export function useTasteLibrary(): UseTasteLibrary {
     [persist],
   );
 
-  return { library, isFavorited, toggleFavorite, addEntries };
+  const setProfile = useCallback(
+    (profile: TasteProfile | null) => {
+      const current = getTasteLibraryClient();
+      const next = { ...current };
+      if (profile) {
+        next.currentProfile = profile;
+      } else {
+        delete next.currentProfile;
+      }
+      persist(next);
+    },
+    [persist],
+  );
+
+  const setLastRegenAt = useCallback(
+    (ts: number) => {
+      const current = getTasteLibraryClient();
+      persist({ ...current, lastRegenAt: ts });
+    },
+    [persist],
+  );
+
+  return { library, isFavorited, toggleFavorite, addEntries, setProfile, setLastRegenAt };
 }
