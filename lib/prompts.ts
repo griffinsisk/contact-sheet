@@ -54,13 +54,28 @@ const INTENT_CRAFT_RULES: Record<IntentPreset, string> = {
 function tasteSection(profile?: { prose: string; aestheticTags: string[] } | null): string {
   if (!profile || profile.aestheticTags.length === 0) return "";
   const tags = profile.aestheticTags.join(", ");
-  return `\nPHOTOGRAPHER TASTE (apply as context, not override):
+  return `\nPHOTOGRAPHER TASTE (your library reflects your aesthetic preferences):
 Tags: ${tags}
 Prose: "${profile.prose}"
 
-Use these as soft bias when reading IMPACT and COMPOSITION. A frame that
-matches this taste reads as intentional; one that doesn't is fine to score
-on its own merits. Session intent still governs CRAFT thresholds.\n`;
+This profile is a soft bias on how you read this frame:
+- A frame that aligns with the photographer's library traits reads as more in their style. Let it nudge IMPACT or COMPOSITION recognition modestly when the rubric supports it. Do NOT use alignment to bypass the STORY GUARDRAIL — warm intimate light on a frame with no decisive moment is still mood, not story, regardless of taste fit.
+- A frame that diverges from those traits is fine to score on its own merits. Do not punish divergence; the rubric's CRAFT GUARDRAIL handles intentional craft choices on its own.
+- Profile influence ceiling: profile-driven adjustment on the overall score MUST NOT exceed ±7 points. Before finalizing each frame's score, run this self-check: "If I removed the profile context entirely and graded only against the rubric, would my score change by more than 7 points?" If yes, you are over-applying profile — re-score using rubric criteria alone, then apply at most ±7 points of taste-driven adjustment.
+- Bucket crossings via profile are allowed ONLY when the rubric-alone score is already near the bucket boundary (within ~5 points of 50, 70, or 85). Examples:
+    OK: rubric-alone 84 SELECT + strong alignment → HERO 86 (near-boundary, +2)
+    OK: rubric-alone 67 MAYBE + alignment → SELECT 71 (near-boundary, +4)
+    NOT OK: rubric-alone 52 MAYBE + alignment → SELECT 78 (+26, far from boundary, exceeds cap)
+    NOT OK: rubric-alone 78 SELECT + divergence → MAYBE 60 (-18, exceeds cap)
+- Per-dimension caps: profile-driven lift on any single dimension (IMPACT, COMPOSITION, STORY) MUST NOT exceed +10 points. STORY in particular: if the frame has no decisive moment per the STORY GUARDRAIL (no clear subject doing something, no gesture, no visible relationship), profile alignment CANNOT push STORY above 50, regardless of palette match. Warm intimate light + person at rest = mood, not story; STORY stays ≤45 even with strong taste fit.
+
+REQUIRED — every cull note when a profile is present must CLOSE with one of these three lines acknowledging profile influence:
+  - "Aligns with your library — [specific trait, e.g., 'warm intimate light matches your golden-hour preference']."
+  - "Diverges from your library — [specific divergence, e.g., 'your library leans tack-sharp wildlife; this motion-blurred candid reads as off-style']."
+  - "Outside your library's strong traits, scored on standalone merits."
+The cull note's primary content (what's actually in the frame, what works or doesn't) MUST come first. The profile-influence line is the CLOSING sentence — context, not headline. Never lead with profile divergence.
+
+Session intent still governs CRAFT thresholds.\n`;
 }
 
 function intentSection(intent: SessionIntent | null): string {
