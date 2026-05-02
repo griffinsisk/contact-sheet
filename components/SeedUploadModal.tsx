@@ -226,10 +226,13 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
   const handleManualRegen = useCallback(async () => {
     if (regenPending) return;
     const last = library.lastRegenAt ?? 0;
-    if (Date.now() - last < REGEN_THROTTLE_MS) {
+    // Throttle protects against unnecessary Sonnet calls, but pending
+    // corrections are a legit reason to regen — they don't shape scoring
+    // until the profile is rebuilt, so blocking would defeat the loop.
+    if (Date.now() - last < REGEN_THROTTLE_MS && pendingCorrectionCount === 0) {
       const wait = Math.ceil((REGEN_THROTTLE_MS - (Date.now() - last)) / (60 * 60 * 1000));
       setProfileStatus("error");
-      setProfileMsg(`Manual regen throttled — try again in ~${wait}h.`);
+      setProfileMsg(`Manual regen throttled — try again in ~${wait}h, or make a new correction to apply pending changes.`);
       return;
     }
     setRegenPending(true);
@@ -238,7 +241,7 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
     } finally {
       setRegenPending(false);
     }
-  }, [regenPending, library.lastRegenAt, runProfileGeneration]);
+  }, [regenPending, library.lastRegenAt, pendingCorrectionCount, runProfileGeneration]);
 
   const { store: overridesStore, remove: removeOverride } = useOverrides();
   const correctionEntries = [...overridesStore.entries].sort((a, b) => b.timestamp - a.timestamp);
