@@ -64,6 +64,9 @@ export default function ContactSheet() {
   // Per-cull opt-out from taste profile (resets after each cull starts)
   const [ignoreTasteProfile, setIgnoreTasteProfile] = useState(false);
 
+  // Taste profile regen status (used to gate cull while auto-regen runs)
+  const [regenStatus, setRegenStatus] = useState<"idle" | "generating">("idle");
+
   // Hydrate intent from sessionStorage after mount (avoids SSR hydration mismatch)
   useEffect(() => {
     const saved = loadSessionIntent();
@@ -195,7 +198,8 @@ export default function ContactSheet() {
     const last = tasteLibrary.lastRegenAt ?? 0;
     if (Date.now() - last < SEVEN_DAYS) return;
 
-    // Fire-and-forget; don't block the cull.
+    // Fire-and-forget; surface state via regenStatus so user can wait if needed.
+    setRegenStatus("generating");
     generateTasteProfile(tasteLibrary)
       .then(({ profile }) => {
         if (profile) setTasteProfile(profile);
@@ -203,6 +207,9 @@ export default function ContactSheet() {
       })
       .catch((err) => {
         console.warn("Auto-regen taste profile failed:", err?.message || err);
+      })
+      .finally(() => {
+        setRegenStatus("idle");
       });
   }, [isPro, tasteLibrary, setTasteProfile, setTasteLastRegenAt]);
 
@@ -691,13 +698,24 @@ export default function ContactSheet() {
                 </button>
                 <button
                   onClick={() => startCull()}
-                  className="px-6 py-3 font-label text-[11px] font-bold uppercase tracking-widest bg-primary text-on-primary hover:bg-primary-dim transition-colors flex items-center gap-2"
+                  disabled={regenStatus === "generating"}
+                  title={regenStatus === "generating" ? "Generating your taste profile…" : undefined}
+                  className="px-6 py-3 font-label text-[11px] font-bold uppercase tracking-widest bg-primary text-on-primary hover:bg-primary-dim transition-colors flex items-center gap-2 disabled:bg-surface-high disabled:text-on-surface-variant disabled:cursor-not-allowed"
                 >
                   <span className="material-symbols-outlined text-[16px]">auto_awesome_motion</span>
                   START CULL
                 </button>
               </div>
             </div>
+
+            {regenStatus === "generating" && (
+              <div className="mt-3 flex items-center justify-end gap-2 text-on-surface-variant">
+                <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                <span className="font-label text-[11px] uppercase tracking-widest">
+                  Updating your taste profile…
+                </span>
+              </div>
+            )}
 
             <div className="pt-4 border-t border-outline-variant">
               <IntentPicker
