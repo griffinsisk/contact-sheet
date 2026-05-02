@@ -5,6 +5,7 @@ import { Photo, CullResult, DeepResult, Rating, ProviderConfig } from "@/lib/typ
 import { formatExifLine, formatExifCamera } from "@/lib/exif";
 import { SCORE_DIMENSIONS } from "@/lib/constants";
 import { runResolutionTest } from "@/lib/api";
+import TasteStarButton from "./TasteStarButton";
 
 interface Props {
   photo: Photo | null;
@@ -14,6 +15,53 @@ interface Props {
   config: ProviderConfig | null;
   onRatingOverride: (rating: Rating) => void;
   onClose: () => void;
+}
+
+type ProfileAlignment = "aligned" | "diverged" | "neutral";
+
+function detectProfileAlignment(note: string): ProfileAlignment | null {
+  if (!note) return null;
+  const lower = note.toLowerCase();
+  if (lower.includes("aligns with your library")) return "aligned";
+  if (lower.includes("diverges from your library")) return "diverged";
+  if (lower.includes("outside your library")) return "neutral";
+  return null;
+}
+
+// Splits a cull note into the frame analysis and the profile-alignment closing
+// sentence so the UI can render them as separate paragraphs.
+function splitProfileLine(note: string): { body: string; closing: string | null } {
+  if (!note) return { body: "", closing: null };
+  const phrases = [
+    "Aligns with your library",
+    "Diverges from your library",
+    "Outside your library",
+  ];
+  for (const phrase of phrases) {
+    // Case-insensitive match; locate phrase regardless of casing.
+    const idx = note.toLowerCase().indexOf(phrase.toLowerCase());
+    if (idx === -1) continue;
+    // Back up to the start of the sentence (after the previous ". ", "! ", "? ").
+    let start = idx;
+    while (start > 0) {
+      const slice = note.slice(0, start);
+      const lastBreak = Math.max(
+        slice.lastIndexOf(". "),
+        slice.lastIndexOf("! "),
+        slice.lastIndexOf("? "),
+      );
+      if (lastBreak === -1) {
+        start = 0;
+      } else {
+        start = lastBreak + 2;
+      }
+      break;
+    }
+    const body = note.slice(0, start).trim();
+    const closing = note.slice(start).trim();
+    return { body, closing: closing.length > 0 ? closing : null };
+  }
+  return { body: note, closing: null };
 }
 
 const RATING_OPTIONS: { rating: Rating; color: string; activeColor: string }[] = [
@@ -64,15 +112,18 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
       style={{ boxShadow: "-20px 0 60px -15px rgba(0,0,0,0.8)", animation: "slideInRight 0.3s ease" }}
     >
       <div className="p-8">
-        {/* Back button */}
-        <button
-          onClick={onClose}
-          aria-label="Close detail panel"
-          className="flex items-center gap-2 mb-6 text-on-surface-variant hover:text-primary transition-colors group"
-        >
-          <span className="material-symbols-outlined text-[18px] group-hover:-translate-x-0.5 transition-transform">arrow_back</span>
-          <span className="font-label text-[10px] uppercase tracking-widest">Back to grid</span>
-        </button>
+        {/* Back button + favorite */}
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={onClose}
+            aria-label="Close detail panel"
+            className="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors group"
+          >
+            <span className="material-symbols-outlined text-[18px] group-hover:-translate-x-0.5 transition-transform">arrow_back</span>
+            <span className="font-label text-[10px] uppercase tracking-widest">Back to grid</span>
+          </button>
+          {!analysis && <TasteStarButton photo={photo} rating={null} />}
+        </div>
 
         {/* Header */}
         <div className="mb-8">
@@ -123,11 +174,14 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
               <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">
                 {ratingOverride ? "YOUR RATING" : "AI RATING"}
               </span>
-              {ratingOverride && (
-                <span className="font-label text-[9px] text-on-surface-variant/60 uppercase tracking-widest">
-                  AI: {analysis.rating}
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {ratingOverride && (
+                  <span className="font-label text-[9px] text-on-surface-variant/60 uppercase tracking-widest">
+                    AI: {analysis.rating}
+                  </span>
+                )}
+                <TasteStarButton photo={photo} rating={ratingOverride ?? analysis.rating} />
+              </div>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {RATING_OPTIONS.map(({ rating, color, activeColor }) => {
@@ -215,9 +269,43 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
             <h3 className="font-label text-[11px] text-on-surface-variant border-l-2 border-primary/40 pl-3 mb-4 uppercase tracking-widest">
               CULL NOTE
             </h3>
-            <p className="font-body text-sm text-on-surface/80 leading-relaxed">
-              {cull.reason}
-            </p>
+            {(() => {
+              const alignment = detectProfileAlignment(cull.reason);
+              if (!alignment) return null;
+              const badgeStyles = {
+                aligned: "bg-primary/15 text-primary border-primary/40",
+                diverged: "bg-tertiary/15 text-tertiary border-tertiary/40",
+                neutral: "bg-surface-highest text-on-surface-variant border-outline-variant",
+              } as const;
+              const labels = {
+                aligned: "Aligns with your library",
+                diverged: "Diverges from your library",
+                neutral: "Outside your library's strong traits",
+              } as const;
+              return (
+                <div className={`inline-flex items-center gap-1.5 mb-3 px-2.5 py-1 border font-label text-[10px] uppercase tracking-widest ${badgeStyles[alignment]}`}>
+                  <span className="material-symbols-outlined text-[14px]">palette</span>
+                  {labels[alignment]}
+                </div>
+              );
+            })()}
+            {(() => {
+              const { body, closing } = splitProfileLine(cull.reason);
+              return (
+                <>
+                  {body && (
+                    <p className="font-body text-sm text-on-surface/80 leading-relaxed">
+                      {body}
+                    </p>
+                  )}
+                  {closing && (
+                    <p className="mt-3 font-body text-sm text-on-surface-variant italic leading-relaxed">
+                      {closing}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 

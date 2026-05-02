@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
 import { ExperienceLevel, SessionSummary } from "@/lib/types";
 import { isRawFile } from "@/lib/raw-preview";
+import { getTasteLibraryClient, type TasteLibrary } from "@/lib/taste-library";
+import SeedUploadModal from "./SeedUploadModal";
 
 interface Props {
   level: ExperienceLevel;
@@ -18,6 +20,17 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
   const { user } = useUser();
   const isPro = user?.publicMetadata?.tier === "pro";
   const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [showSeedModal, setShowSeedModal] = useState(false);
+  const [seedModalMode, setSeedModalMode] = useState<"manage" | "view">("manage");
+  const [library, setLibrary] = useState<TasteLibrary | null>(null);
+
+  useEffect(() => {
+    if (!isPro) return;
+    if (!showSeedModal) setLibrary(getTasteLibraryClient());
+  }, [isPro, showSeedModal]);
+
+  const profile = library?.currentProfile;
+  const seedCount = library?.entries.length ?? 0;
 
   const startCheckout = async () => {
     setUpgradeLoading(true);
@@ -122,10 +135,28 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
             Drop a shoot. Get HERO / SELECT / MAYBE / CUT calls on what you captured — before Lightroom, before the edit,
             before the attachment sets in.
           </p>
+          {isPro ? (
+            <p className="mt-3 mono-label text-[10px] text-primary/80 tracking-[0.15em]">
+              ✓ PRO · UNLIMITED CULLS
+            </p>
+          ) : (
+            <p className="mt-3 mono-label text-[10px] text-on-surface-variant/70 tracking-[0.15em]">
+              BELOW: PICK HOW TO RUN IT, THEN DROP PHOTOS. ABOUT 30 SECONDS.
+            </p>
+          )}
         </div>
 
-        {/* Three-path picker */}
-        <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+        {/* Step 01 — tier choice (hidden for Pro: the choice is settled) */}
+        {!isPro && (
+          <div className="w-full mb-3 flex items-baseline gap-3">
+            <span className="mono-label text-[10px] text-primary tracking-[0.25em]">01 /</span>
+            <span className="mono-label text-[10px] text-on-surface tracking-[0.2em]">CHOOSE ACCESS</span>
+          </div>
+        )}
+
+        {/* Three-path picker (hidden for Pro) */}
+        {!isPro && (
+        <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {/* Try free */}
           <div className={cardBase}>
             <div>
@@ -192,7 +223,58 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
               Paste Your Key
             </button>
           </div>
+
+          {/* BYOK and tier picker close above; taste seeding sits as a quiet aside below. */}
         </div>
+        )}
+
+        {/* Optional taste seeding — visually subordinate to the tier picker */}
+        <div className="w-full mb-12 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-t border-outline-variant/20 pt-5">
+          <div>
+            {profile ? (
+              <>
+                <span className="mono-label text-[10px] text-primary tracking-[0.2em] flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                  TASTE PROFILE READY
+                </span>
+                <p className="mt-2 text-sm text-on-surface-variant max-w-2xl">
+                  {seedCount} favorite{seedCount === 1 ? "" : "s"} · {profile.aestheticTags.length} tag{profile.aestheticTags.length === 1 ? "" : "s"} · updated {new Date(profile.generatedAt).toLocaleDateString()}. Future culls bias toward how you see.
+                </p>
+              </>
+            ) : (
+              <>
+                <span className="mono-label text-[10px] text-outline tracking-[0.2em]">OR — TEACH YOUR EYE FIRST</span>
+                <p className="mt-2 text-sm text-on-surface-variant max-w-2xl">
+                  Upload 8–20 favorites to seed your taste library so future culls reflect how you see, not generic defaults.
+                </p>
+              </>
+            )}
+          </div>
+          <div className="shrink-0 flex items-center gap-2">
+            {profile && (
+              <button
+                onClick={() => { setSeedModalMode("view"); setShowSeedModal(true); }}
+                className="bg-transparent border border-outline-variant text-on-surface hover:bg-surface-high px-6 py-3 mono-label text-[11px] uppercase tracking-widest font-bold transition-colors duration-200"
+              >
+                View Profile
+              </button>
+            )}
+            <button
+              onClick={() => { setSeedModalMode("manage"); setShowSeedModal(true); }}
+              className="bg-transparent border border-outline-variant text-on-surface hover:bg-surface-high px-6 py-3 mono-label text-[11px] uppercase tracking-widest font-bold transition-colors duration-200"
+            >
+              {profile ? "Manage Library" : "Upload Favorites"}
+            </button>
+          </div>
+        </div>
+
+        {/* Step 02 — drop photos (hidden for Pro: only one action remains, dropzone speaks for itself) */}
+        {!isPro && (
+          <div className="w-full mb-3 flex items-baseline gap-3">
+            <span className="mono-label text-[10px] text-primary tracking-[0.25em]">02 /</span>
+            <span className="mono-label text-[10px] text-on-surface tracking-[0.2em]">DROP YOUR SHOOT</span>
+          </div>
+        )}
 
         {/* Drop Zone */}
         <div
@@ -321,6 +403,13 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
             </div>
           </div>
         </section>
+      )}
+
+      {showSeedModal && (
+        <SeedUploadModal
+          onClose={() => setShowSeedModal(false)}
+          mode={seedModalMode}
+        />
       )}
     </main>
   );

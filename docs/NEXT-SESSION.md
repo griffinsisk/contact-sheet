@@ -1,242 +1,99 @@
-# Next Session Plan — Taste Library + Override Learning
+# Next Session — Open Phase B PR → main
 
-**Starting state:** `main` at `4ee276b` (docs). Production at https://contact-sheet-three.vercel.app. Phase A shipped and validated.
+**Branch:** `feature/taste-library` (local; 4 commits ahead of origin, needs push). Run `git log --oneline -6` to see HEAD.
+**Prod:** still Phase A at https://contact-sheet-three.vercel.app.
+**Validation status:** Phase B preview tested 2026-05-02, working end-to-end. Profile generates from seed, alignment indicator renders, opt-out works, History/SessionsModal opens, ratingOverrides honored in exports. 4-of-4 PASS still holds.
 
-**Target:** finish V1 in ~2 weeks of remaining work. V1 = intent-aware rubric (✅) + taste library with lite profile + override learning + polish.
+## Pickup point
 
-## First 5 minutes — verify state
+1. **Push branch** (4 commits ahead of origin):
+   ```bash
+   cd "/Users/griffin.sisk/Desktop/AI Projects/contact-sheet-repo"
+   git push origin feature/taste-library
+   ```
+
+2. **(Optional) Quick re-test on Vercel preview** — the new build will deploy automatically. Two changes to verify:
+   - Seed 8+ favorites on a fresh profile state → click START CULL immediately. Button should be disabled with "Updating your taste profile…" pill visible. Becomes enabled once regen finishes.
+   - Open DetailPanel for any culled frame with an alignment badge → cull note body and "Aligns with your library — …" closing line are on separate paragraphs (closing line italic + muted).
+
+3. **Open PR**:
+   ```bash
+   gh pr create --base main --head feature/taste-library --title "Phase B: Taste Library"
+   ```
+   Body should reference `docs/PHASE-B-TEST-RESULTS.md`. Suggested body:
+
+   ```markdown
+   ## Summary
+
+   Adds taste-library learning: anonymous Pro users can favorite frames into a personal library, which auto-generates a taste profile (prose + aesthetic tags) used as a soft bias during cull and deep review.
+
+   - Profile injected at cull time when present; per-cull opt-out toggle for off-style shoots.
+   - Alignment indicator badge on cull notes (aligns / diverges / outside) with text-match detection on a required closing-line template.
+   - History/SessionsModal for browsing prior culls; re-import preserves ratingOverrides in exports.
+
+   Validation: 4-of-4 PASS on `docs/PHASE-B-TEST-RESULTS.md`. One known limitation (bed +20 outlier with narrow-genre wildlife seed) accepted for V1; documented in test results.
+
+   ## Test plan
+   - [ ] Sign in as Pro, seed 8+ favorites, confirm profile auto-generates
+   - [ ] Cull a shoot → alignment badge + split closing line render correctly
+   - [ ] Toggle opt-out → score reverts to rubric-only
+   - [ ] History → SessionsModal opens
+   - [ ] Export with ratingOverrides applied
+   ```
+
+4. **Merge PR on GitHub.** Vercel auto-deploys main → smoke-test prod (sign in, seed, cull, alignment).
+
+## Recent commits (since pickup baseline)
+
+- (HEAD) docs(next-session): correct branch state, drop self-referential SHAs
+- `304b0e1` docs(next-session): scaffold for PR-opening session
+- `1d3d608` feat(taste-library): split cull note body from profile alignment line
+- `72517a3` feat(taste-library): regen status indicator + disable cull during regen
+- `27da71d` docs(next-session): pickup point for Phase B preview test → PR → merge
+- `7a2f83a` docs(phase-b): test results capture + NEXT-SESSION refresh
+- `966dc16` feat(taste-library): wire profile into cull/deep-review + opt-out + alignment indicator + restored guards
+- `480a779` feat(history+exports+restored): SessionsModal, re-import copy, ratingOverrides honored
+- `862362f` feat(taste-library): preamble tuning for off-intent variance
+
+## First 3 minutes — verify state
 
 ```bash
 cd "/Users/griffin.sisk/Desktop/AI Projects/contact-sheet-repo"
-git log --oneline -5
-npx tsc --noEmit
-npm run dev
+git status                # clean, 4 commits ahead of origin
+git log --oneline -6      # confirm last 6 commits match section below
+npx tsc --noEmit          # clean
 ```
 
-**Feature branches:** `feature/taste-library` for Phase B, `feature/overrides` for Phase C. Merge each when its validation gate passes.
+## What changed this session (race fix + cull note split)
 
----
+### Race condition on first cull after seeding (`components/ContactSheet.tsx`)
 
-## Phase A — shipped
+Auto-regen runs fire-and-forget after favoriting. ~15–30s LLM call. If user clicks START CULL during that window, the cull fires with stale or absent profile. Confirmed via DevTools: profile in localStorage, but first cull's request had stale state.
 
-- Vercel deploy ✅ (live, smoke-tested: checkout → webhook → tier upgrade → cull)
-- Intent picker ✅ (8 presets + free-form, sessionStorage-sticky)
-- 5-dim rubric ✅ (RAW_QUALITY + CRAFT_EXECUTION split, intent-conditional CRAFT, STORY/CRAFT guardrails, 12 calibration anchors)
-- Validation: boba SELECT 78, bed MAYBE 52, dog MAYBE 58, NZ landscape SELECT 76. Boba @ landscape mismatch drops to 50s — intent-conditionality confirmed.
+Fix: added `regenStatus: 'idle' | 'generating'` state, set on regen kickoff, cleared in `.finally()`. Disabled START CULL with tooltip + grayed style while generating. Inline "Updating your taste profile…" pill above the cull setup divider for visibility.
 
----
+### Cull note alignment line as separate paragraph (`components/DetailPanel.tsx`)
 
-## Design pivot (2026-04-22)
+The required closing line ("Aligns with your library — …") was rendering as a run-on continuation of the frame analysis, blurring the distinction between content-of-frame and profile-context.
 
-Original Phase B spec (weightAdjustments + cutThresholdShift + primaryIntentAffinity) was wrong for cross-genre photographers. Those mechanisms assume a single coherent genre preference. Real photographers shoot across genres but have cross-genre *taste* (tonal palette, compositional habits, moment preference). **Phase B now encodes taste only; genre handling stays in Phase A (session intent).**
+Added `splitProfileLine(note)` helper: locates the alignment phrase (case-insensitive), backs up to the start of that sentence (last `". "`, `"! "`, or `"? "`), returns `{body, closing}`. Renders closing as separate paragraph with `mt-3 italic text-on-surface-variant`. Graceful fallback if no alignment phrase detected.
 
-Also: profile was specced as a one-shot snapshot. Real value comes from **continuous growth** — users favoriting frames in-app + overrides feeding regeneration. The persistent artifact is a **taste library** (photos the user has marked as representative); the profile is *derived* from it and regenerates as the library grows.
+## Open follow-ons (post-merge, not blocking)
 
----
+- **Profile preamble tuning iteration tooling** — small harness for N frames × M preamble variants
+- **Mixed-shoot Test 3** — wildlife + non-wildlife in one cull (untested combo)
+- **Filename capture in baseline runs** (process memory updated, no code change)
+- **Two-pass scoring** as opt-in or "Compare with/without profile" — defer to V2
+- **Profile coherence handling** — narrow seeds (wildlife-only) over-fit to genre
+- **Bed +20 outlier** — revisit in Phase C+ if telemetry shows it hits frequently
 
-## Phase B — Taste library + lite profile (~1.5 days)
+## Phase C — Override learning (after merge)
 
-Goal: a living taste library that grows from in-app favoriting, and a derived profile (prose + tags) that nudges how the model reads frames.
+`feature/overrides` branch. Spec stub:
+- `OverrideEntry { photoHash, shortDescription, sessionIntent, originalScore/Rating, userRating, timestamp }`. Rolling last 30.
+- Few-shot injection: last 5–10 overrides (weighted by sessionIntent match) → `PAST OVERRIDES FROM THIS PHOTOGRAPHER:` block above rubric.
+- `shortDescription` from tiny model call at override time, cached on entry.
+- Profile regen: pull last 30 overrides into stage-1 prose as additional signal.
+- Bed-outlier case gets corrected here: user marks bed as actual MAYBE, override teaches model that this photographer's "story" requires more than warm intimate light.
 
-### B.0 — Validation gate (~30 min, before any UI work)
-
-Write `scripts/test-style-profile.ts` — a standalone node script that takes a directory of images and runs the `STYLE_PROFILE_PROMPT` against Anthropic. Run against 4 test sets:
-
-- **(a)** 12 of your real favorites — is the prose recognizably *you*?
-- **(b)** 12 wildlife-only frames — output *meaningfully different* from (a)?
-- **(c)** 8 deliberately incoherent frames across genres — does the model admit low coherence?
-- **(d)** Re-run (a) — stable across runs?
-
-If 3 of 4 pass, Phase B holds. If not, rethink.
-
-### B.1 — Data model + storage (~0.25 day)
-
-```ts
-interface TasteEntry {
-  photoHash: string;       // hash of downsized pixels, not file bytes
-  addedAt: number;
-  originalRating?: Rating; // what the model said when favorited (null if seeded via batch upload)
-  rescued?: boolean;       // true if this was a CUT the user rescued — highest-signal
-}
-
-interface TasteLibrary {
-  version: 1;
-  entries: TasteEntry[];             // cap 100; eviction is FIFO unless `pinned`
-  pinned?: string[];                 // photoHashes that survive eviction
-  currentProfile?: {
-    prose: string;                   // shown to user
-    aestheticTags: string[];         // injected into prompt preamble
-    generatedAt: number;
-    generatedFromEntryCount: number;
-  };
-  lastRegenAt?: number;
-}
-```
-
-Storage:
-- Pro: `clerkClient.users.updateUser({ publicMetadata: { tasteLibrary } })`
-- Free: `localStorage["cs-taste-library"]`
-- Helper in `lib/taste-library.ts` that reads from whichever tier is active
-
-**No weightAdjustments, no cutThresholdShift, no primaryIntentAffinity.** The only mechanical effect on scoring comes from `aestheticTags` in the preamble.
-
-### B.2 — In-app favoriting UI (~0.25 day)
-
-Add a ★ action to `DetailPanel` and `PhotoGrid` cards: "Add to my taste library." Available on any rating, including CUTs (rescuing a CUT is the highest-signal data — it's what the user keeps that defaults would throw away). Mark rescued CUTs with `rescued: true` on the entry.
-
-Visual state: filled star = in library. Click to toggle.
-
-### B.3 — Seed upload flow (~0.25 day)
-
-Optional entry point for cold start:
-
-- New card in the empty-state three-path picker: "UPLOAD 8–20 FAVORITES" → modal drop zone → seeds the library in one go.
-- Same modal accessible from Settings (gear icon → "My taste library" → "Add favorites").
-
-Hybrid of options (a) + (b) from the earlier design decision. Users who never engage this flow still get a profile built passively from in-app favoriting once they cross the threshold.
-
-### B.4 — Profile generation (~0.25 day)
-
-New route: `app/api/taste-profile/route.ts`. Input: library entries (downsized photos + hashes). Output: `{ prose, aestheticTags }`.
-
-Resize all photos to 512px on long edge before base64 encoding (well under Vercel's 4.5MB body limit even with 20+ photos).
-
-**Two-stage generation** to keep prose and tags aligned:
-1. Call 1 — prompt asks for 100–150 word prose describing aesthetic preferences that survive across genres. Shown to user verbatim.
-2. Call 2 — prompt extracts 4–8 aestheticTags *from the prose* (not from images directly). Machine-readable, injected into cull prompts.
-
-Why two stages: if we ask for prose + tags in one call, they can drift apart. The user reads the prose; the system acts on the tags. Divergence = broken trust. Two-stage enforces alignment by derivation.
-
-Cost: ~$0.02 per generation. Trivial.
-
-### B.5 — Prompt preamble integration (~0.25 day)
-
-Update `buildCullPrompt` / `buildDeepReviewPrompt` to accept an optional `profile: { prose: string; aestheticTags: string[] } | null` arg and inject at the top of the preamble:
-
-```
-PHOTOGRAPHER TASTE (apply as context, not override):
-Tags: warm_tones, tight_crops, candid_over_posed
-Prose: "Consistently frames with tight negative space…"
-
-Use these as soft bias when reading IMPACT and COMPOSITION. A frame that 
-matches this taste reads as intentional; one that doesn't is fine to score 
-on its own merits. Session intent still governs CRAFT thresholds.
-```
-
-Order stays: profile → intent → free-form → [V1.5 slots] → rubric body → images.
-
-Plumb through proxy routes (accept `profile` in body with Zod-ish validation).
-
-### B.6 — Auto-regen + throttle + manual regen (~0.25 day)
-
-- Auto-regen trigger: when `library.entries.length - (currentProfile?.generatedFromEntryCount ?? 0) >= 5`, queue regeneration.
-- Throttle: skip if `Date.now() - lastRegenAt < 7 days`.
-- Manual regen button in Settings — bypasses throttle (max once per 12 hours).
-- Auto-regen runs server-side on next API call so user doesn't wait on it.
-- First regen triggers at library count = 8 (the minimum useful size).
-
-### Validation gate (B, end-of-phase)
-
-1. Seed library with 12 of your favorites → generate profile → prose feels like you.
-2. Re-run the 4 Phase-A test cases with profile active → bed still MAYBE, dog still MAYBE (profile shouldn't rescue weak frames).
-3. Re-run with a *different* taste profile (wildlife-heavy set) → intent-appropriate frames score *higher*, non-intent frames neutral.
-4. Upload 5 new frames via in-app favoriting → auto-regen fires → profile drifts toward new taste.
-
----
-
-## Phase C — Override learning (~1.5 days)
-
-### C.1 — Override persistence (~0.5 day)
-
-```ts
-interface OverrideEntry {
-  photoHash: string;
-  shortDescription: string;       // 10-word model-generated, cached at override time
-  sessionIntent: IntentPreset;
-  originalScore: number;
-  originalRating: Rating;
-  userRating: Rating;
-  timestamp: number;
-}
-```
-
-Rolling last 30. Storage alongside `tasteLibrary` (same Clerk `publicMetadata` + localStorage pattern).
-
-Override + rescue-from-CUT are distinct actions: override = "model said X, I say Y" (updates rating only); rescue-from-CUT = override + add to taste library (the "this is how I see" affirmation).
-
-### C.2 — Few-shot injection (~0.5 day)
-
-In cull prompt builder, pull last 5–10 overrides (weighted toward same `sessionIntent`) and format:
-
-```
-PAST OVERRIDES FROM THIS PHOTOGRAPHER:
-- Frame with [brief desc]: model SELECT 72, photographer said HERO.
-- Frame with [brief desc]: model SELECT 78, photographer said CUT.
-Use as calibration — this photographer's taste differs from defaults here.
-```
-
-Description generated via tiny model call at override time, cached on entry.
-
-### C.3 — Overrides → profile regen signal (~0.5 day)
-
-On profile regen, pull last 30 overrides into the stage-1 prose prompt as additional signal ("here's how this photographer has actually rated frames — let that sharpen the taste description"). Profile drifts toward revealed preference over time.
-
-### Validation gate (C)
-
-Override 10 frames across 2 shoots → re-cull a third shoot with the same intent → few-shot examples visibly shift borderline calls in the override direction (without deforming cases far from the boundary).
-
----
-
-## Phase D — Demo fixtures + polish (~1 day)
-
-### D.1 — Commit demo fixtures
-
-- `fixtures/demo-shoot/` — 34-photo test set with sanitized names (`shot_001.jpg` … `shot_034.jpg`).
-- `fixtures/demo-library.json` — seeded taste library for reproducible demos.
-- `fixtures/README.md` — one paragraph on reproduction.
-
-### D.2 — Rate-limit retry in prod
-
-Port `lib/harness.ts::callWithRetry` into cull/deep dispatch. One throttled batch shouldn't kill a 100-photo run.
-
-### D.3 — Learning-mode threshold bump
-
-Learning users see too many CUTs and quit. Bump HERO threshold to 75 (from 85), SELECT to 60 (from 70), for Learning mode only.
-
-### D.4 — Final copy pass
-
-Intent picker, taste library onboarding, three-path picker. Consistency sweep.
-
----
-
-## V1.5 carve-outs — designed for, not built
-
-1. **Per-session tone references (moodboard match).** Preamble reserves the slot.
-2. **Multiple named taste libraries** ("wedding mode" / "street mode"). Data model migrates `tasteLibrary` → `tasteLibraries: { [name]: TasteLibrary }`, active one picked at cull-start.
-3. **Anonymized override telemetry.** Opt-in upload for prompt iteration.
-4. **Profile prose editing.** User edits prose → hints regenerated from edited prose.
-5. **Macro preset.** Tested 2026-04-22 and current behavior is correct; revisit only if real macro frames consistently under-score.
-
-Triggers in `docs/DECISIONS.md`.
-
----
-
-## Known gaps / watch items
-
-- **Vercel Hobby 4.5MB body limit.** 15 × 512px favorites ≈ 2.25MB with base64 overhead; comfortable margin. Cull batches at 1024px can approach the limit — if a batch hits the ceiling, reduce `CULL_BATCH_SIZE`.
-- **Override/favorites content-hash.** Hash downsized pixels, not file bytes (re-saves must hash the same).
-- **System-prompt cache disabled on intent-aware routes.** Every cull builds a different prompt. If profile becomes standard, cache won't help anyway.
-- **Stripe sandbox has two webhook destinations.** Production uses the `contact-sheet-three.vercel.app` secret; local uses the `stripe listen` forwarder secret. Don't mix.
-- **Dim bars render from `cull.scores` when deep review absent.** Validation aid from 2026-04-22; low-risk, keep.
-- **Survivor bias in taste library from in-app favoriting.** Users favorite what cull didn't hide; rescue-from-CUT is the corrective data flow.
-
----
-
-## Commit cadence
-
-Phase A: shipped direct to `main`. 
-Phase B: `feature/taste-library`, commit per step, merge when gate passes. 
-Phase C: `feature/overrides`, merge when scoring visibly adapts. 
-Phase D: direct to `main`.
-
-When updating this file next session: rewrite rather than append. Rolling plan, not a log.
+## When updating this file next session: rewrite rather than append.

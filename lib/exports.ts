@@ -1,4 +1,4 @@
-import { Photo, CullResult, DeepResult, ExifData } from "./types";
+import { Photo, CullResult, DeepResult, ExifData, Rating } from "./types";
 import { STAR_MAP, LABEL_MAP } from "./constants";
 import { formatExifLine, formatExifCamera } from "./exif";
 
@@ -10,10 +10,21 @@ export function sanitizeFilename(title: string): string {
   return title.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "").substring(0, 60).toLowerCase();
 }
 
-export function generateXMP(filename: string, cull: CullResult, deep?: DeepResult): string {
+// Effective rating: override > deep > cull. Score always reflects AI analysis.
+function effectiveRating(cull: CullResult, deep?: DeepResult, override?: Rating): Rating {
+  return override ?? deep?.rating ?? cull.rating;
+}
+
+export function generateXMP(
+  filename: string,
+  cull: CullResult,
+  deep?: DeepResult,
+  override?: Rating,
+): string {
   const a = deep || cull;
-  const stars = STAR_MAP[a.rating] || 0;
-  const label = LABEL_MAP[a.rating] || "";
+  const rating = effectiveRating(cull, deep, override);
+  const stars = STAR_MAP[rating] || 0;
+  const label = LABEL_MAP[rating] || "";
   const title = deep?.title || "";
   const desc = deep
     ? `${deep.technical || ""}\n\n${deep.style_story || ""}\n\n${deep.verdict || ""}`.trim()
@@ -34,8 +45,8 @@ export function generateXMP(filename: string, cull: CullResult, deep?: DeepResul
       ${desc ? `<dc:description><rdf:Alt><rdf:li xml:lang="x-default">${esc(desc)}</rdf:li></rdf:Alt></dc:description>` : ""}
       <dc:subject><rdf:Bag>
         <rdf:li>ContactSheet</rdf:li>
-        <rdf:li>${a.rating}</rdf:li>
-        <rdf:li>Score:${a.score}</rdf:li>
+        <rdf:li>${rating}</rdf:li>
+        <rdf:li>Score:${a.score}</rdf:li>${override ? `\n        <rdf:li>HumanOverride</rdf:li>` : ""}
       </rdf:Bag></dc:subject>
     </rdf:Description>
   </rdf:RDF>
@@ -49,6 +60,7 @@ export function generateOrgScript(
   recommendedSequence: number[] | null,
   platform: "unix" | "windows" = "unix",
   renameFiles = false,
+  ratingOverrides: Record<number, Rating> = {},
 ): { content: string; filename: string } {
   const rf: Record<string, string> = { HERO: "01_heroes", SELECT: "02_selects", MAYBE: "03_maybes", CUT: "04_cuts" };
   const isWin = platform === "windows";
@@ -66,14 +78,19 @@ export function generateOrgScript(
   s += "\n";
 
   const folders = new Set<string>();
-  photos.forEach((_, i) => { const c = cullResults[i]; if (c) folders.add(rf[c.rating] || "04_cuts"); });
+  photos.forEach((_, i) => {
+    const c = cullResults[i]; if (!c) return;
+    const rating = effectiveRating(c, deepResults[i], ratingOverrides[i]);
+    folders.add(rf[rating] || "04_cuts");
+  });
   s += `${cmt} === Rating Tier Folders ===\n`;
   folders.forEach(f => { s += `${mkdir} "organized${sep}by_rating${sep}${f}"\n`; });
   s += "\n";
 
   photos.forEach((p, i) => {
     const c = cullResults[i]; if (!c) return;
-    const folder = rf[c.rating] || "04_cuts";
+    const rating = effectiveRating(c, deepResults[i], ratingOverrides[i]);
+    const folder = rf[rating] || "04_cuts";
     const fileExt = p.name.split(".").pop() || "jpg";
     let destName = p.name;
     if (renameFiles) {
@@ -105,6 +122,7 @@ export function generateManifest(
   deepResults: Record<number, DeepResult>,
   curatorialNotes: string | null,
   recommendedSequence: number[] | null,
+  ratingOverrides: Record<number, Rating> = {},
 ): string {
   let t = "CONTACT SHEET — ANALYSIS MANIFEST\n";
   t += `Generated: ${new Date().toISOString()}\n`;
@@ -117,7 +135,10 @@ export function generateManifest(
     t += "RECOMMENDED SEQUENCE\n" + "-".repeat(40) + "\n";
     recommendedSequence.forEach((idx, i) => {
       const p = photos[idx]; const c = cullResults[idx];
-      if (p && c) t += `${i + 1}. ${p.name} (${c.rating} — ${c.score})\n`;
+      if (p && c) {
+        const r = effectiveRating(c, deepResults[idx], ratingOverrides[idx]);
+        t += `${i + 1}. ${p.name} (${r} — ${c.score})\n`;
+      }
     });
     t += "\n";
   }
@@ -126,8 +147,15 @@ export function generateManifest(
   photos.forEach((p, i) => {
     const c = cullResults[i]; if (!c) return;
     const d = deepResults[i];
+    const override = ratingOverrides[i];
+    const aiRating = d?.rating ?? c.rating;
+    const finalRating = override ?? aiRating;
     t += `${p.name}\n` + "-".repeat(40) + "\n";
-    t += `Rating: ${c.rating} | Overall: ${c.score}/100\n`;
+    if (override && override !== aiRating) {
+      t += `Rating: ${finalRating} (human override; AI rated ${aiRating}) | Overall: ${c.score}/100\n`;
+    } else {
+      t += `Rating: ${finalRating} | Overall: ${c.score}/100\n`;
+    }
     if (d?.scores) t += `Impact: ${d.scores.impact} | Composition: ${d.scores.composition} | Raw Quality: ${d.scores.rawQuality} | Craft: ${d.scores.craftExecution} | Story: ${d.scores.story}\n`;
     if (d?.title) t += `Title: ${d.title}\n`;
     t += "\n";

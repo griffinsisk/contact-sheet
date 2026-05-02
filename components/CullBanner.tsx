@@ -3,9 +3,10 @@
 interface Props {
   deepCount: number;
   onStartDeepReview: () => void;
+  isRestored?: boolean;
 }
 
-export default function CullBanner({ deepCount, onStartDeepReview }: Props) {
+export default function CullBanner({ deepCount, onStartDeepReview, isRestored }: Props) {
   return (
     <div className="bg-primary px-8 py-4 flex justify-between items-center">
       <div className="flex items-center gap-3">
@@ -16,10 +17,14 @@ export default function CullBanner({ deepCount, onStartDeepReview }: Props) {
           check_circle
         </span>
         <span className="font-label font-black uppercase tracking-widest text-on-primary text-sm">
-          Cull complete
+          {isRestored ? "Restored session" : "Cull complete"}
         </span>
       </div>
-      {deepCount > 0 ? (
+      {isRestored ? (
+        <span className="font-label text-xs text-on-primary/70 uppercase tracking-widest">
+          Re-import originals to run new analysis
+        </span>
+      ) : deepCount > 0 ? (
         <button
           onClick={onStartDeepReview}
           aria-label={`Start deep review of ${deepCount} photos`}

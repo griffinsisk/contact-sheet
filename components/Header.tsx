@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import UpgradeButton from "./UpgradeButton";
+import SeedUploadModal from "./SeedUploadModal";
 
 interface Props {
   onHistory: () => void;
@@ -10,6 +12,8 @@ interface Props {
 }
 
 export default function Header({ onHistory, onSettings, onAddFiles }: Props) {
+  const [showSeedModal, setShowSeedModal] = useState(false);
+
   return (
     <header className="fixed top-0 z-50 flex justify-between items-center w-full px-6 py-4 bg-background">
       <div className="flex items-center gap-8">
@@ -29,6 +33,14 @@ export default function Header({ onHistory, onSettings, onAddFiles }: Props) {
           aria-label="Add files"
         >
           <span className="material-symbols-outlined">add_box</span>
+        </button>
+        <button
+          onClick={() => setShowSeedModal(true)}
+          className="text-on-surface/60 hover:text-primary transition-colors duration-200 p-2"
+          aria-label="Add favorites to taste library"
+          title="Add favorites to taste library"
+        >
+          <span className="material-symbols-outlined">palette</span>
         </button>
         <button
           onClick={onHistory}
@@ -57,6 +69,7 @@ export default function Header({ onHistory, onSettings, onAddFiles }: Props) {
           <UserButton />
         </SignedIn>
       </div>
+      {showSeedModal && <SeedUploadModal onClose={() => setShowSeedModal(false)} />}
     </header>
   );
 }
