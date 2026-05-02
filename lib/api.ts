@@ -1,6 +1,6 @@
 import { Photo, ProviderConfig, CullResult, DeepResult, CullResponse, DeepResponse, CompareResponse, ExperienceLevel, SessionIntent } from "./types";
 import { callProvider, parseJSON } from "./providers";
-import { CULL_PROMPT, DEEP_REVIEW_PROMPT, COMPARE_PROMPT, EXPERIENCE_VOICE, buildCullPrompt, buildDeepReviewPrompt, type OverrideHint } from "./prompts";
+import { CULL_PROMPT, DEEP_REVIEW_PROMPT, COMPARE_PROMPT, EXPERIENCE_VOICE, buildCullPrompt, buildDeepReviewPrompt } from "./prompts";
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "./constants";
 import { formatExifForPrompt } from "./exif";
 import { downsizeForCull, resizeToMax } from "./resize";
@@ -66,7 +66,6 @@ export async function runCull(
   intent: SessionIntent | null,
   onProgress?: ProgressFn,
   profile: TasteProfileArg = null,
-  overrides: OverrideHint[] | null = null,
 ): Promise<Record<number, CullResult>> {
   const allResults: Record<number, CullResult> = {};
   const batches: { photo: Photo; globalIndex: number }[][] = [];
@@ -92,14 +91,13 @@ export async function runCull(
     const response = await dispatchApiCall({
       config,
       endpoint: "cull",
-      system: buildCullPrompt(intent, profile, overrides),
+      system: buildCullPrompt(intent, profile),
       images,
       textParts,
       maxTokens: 4096,
       extraBody: {
         ...(intent ? { intent } : {}),
         ...(profile ? { profile } : {}),
-        ...(overrides && overrides.length > 0 ? { overrides } : {}),
       },
     });
 

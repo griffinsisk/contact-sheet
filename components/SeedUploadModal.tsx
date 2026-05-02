@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { TasteEntry, contentHash, generateTasteProfile, getTasteLibraryClient } from "@/lib/taste-library";
+import { getOverridesClient } from "@/lib/overrides";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
 
 const REGEN_THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -138,7 +139,8 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
     try {
       // Re-read storage to include just-added entries even if hook state hasn't re-rendered yet.
       const fresh = getTasteLibraryClient();
-      const { profile, coherence, usedEntryCount } = await generateTasteProfile(fresh);
+      const freshCorrections = getOverridesClient().entries;
+      const { profile, coherence, usedEntryCount } = await generateTasteProfile(fresh, freshCorrections);
       if (profile) {
         setProfile(profile);
         setLastRegenAt(Date.now());
@@ -225,6 +227,9 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
 
   const usableEntryCount = library.entries.filter((e) => !!e.image).length;
   const canManualRegen = isPro && usableEntryCount >= 4 && doneCount === null;
+  const correctionSignalCount = typeof window !== "undefined"
+    ? getOverridesClient().entries.filter((e) => e.shortDescription.trim().length > 0).length
+    : 0;
 
   const stagedValid = staged.length >= MIN_FILES && staged.length <= MAX_FILES;
 
@@ -417,7 +422,7 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
                     </div>
                     <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
                       {library.currentProfile
-                        ? `${library.currentProfile.aestheticTags.length} tags · from ${library.currentProfile.generatedFromEntryCount} favorites`
+                        ? `${library.currentProfile.aestheticTags.length} tags · from ${library.currentProfile.generatedFromEntryCount} favorites${correctionSignalCount > 0 ? ` + ${correctionSignalCount} correction${correctionSignalCount === 1 ? "" : "s"}` : ""}`
                         : "No profile yet"}
                       {library.lastRegenAt && ` · last run ${new Date(library.lastRegenAt).toLocaleDateString()}`}
                     </div>

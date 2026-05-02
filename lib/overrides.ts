@@ -73,18 +73,16 @@ export function clearAllOverrides(): void {
   setOverridesClient(emptyStore());
 }
 
-/**
- * Pick the most relevant overrides for a cull request, weighting by
- * matching sessionIntent. Returns up to `limit`, recency-sorted within
- * each tier (intent-match first, then others).
- */
-export function selectFewShot(
-  store: OverrideStore,
-  sessionIntent: IntentPreset,
-  limit: number,
-): OverrideEntry[] {
-  const matches = store.entries.filter((e) => e.sessionIntent === sessionIntent);
-  const others = store.entries.filter((e) => e.sessionIntent !== sessionIntent);
-  const byRecent = (a: OverrideEntry, b: OverrideEntry) => b.timestamp - a.timestamp;
-  return [...matches.sort(byRecent), ...others.sort(byRecent)].slice(0, limit);
+const RATING_ORDER: Rating[] = ["CUT", "MAYBE", "SELECT", "HERO"];
+
+/** +N if user pushed up, -N if user pushed down, 0 if same. */
+export function bucketDelta(original: Rating, user: Rating): number {
+  return RATING_ORDER.indexOf(user) - RATING_ORDER.indexOf(original);
+}
+
+export function signalPolarity(entry: OverrideEntry): "positive" | "negative" | "neutral" {
+  const d = bucketDelta(entry.originalRating, entry.userRating);
+  if (d > 0) return "positive";
+  if (d < 0) return "negative";
+  return "neutral";
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callProvider } from "@/lib/providers";
-import { buildCullPrompt, type OverrideHint } from "@/lib/prompts";
-import { SessionIntent, IntentPreset, Rating } from "@/lib/types";
+import { buildCullPrompt } from "@/lib/prompts";
+import { SessionIntent, IntentPreset } from "@/lib/types";
 
 // Server-side cull endpoint for the free + pro tiers. BYOK users call
 // Anthropic directly from the browser and never hit this route.
@@ -35,30 +35,6 @@ function coerceProfile(raw: unknown): ProfilePayload | null | "invalid" {
   if (typeof r.prose !== "string") return "invalid";
   if (!Array.isArray(r.aestheticTags) || !r.aestheticTags.every(t => typeof t === "string")) return "invalid";
   return { prose: r.prose, aestheticTags: r.aestheticTags as string[] };
-}
-
-const VALID_RATINGS: Rating[] = ["HERO", "SELECT", "MAYBE", "CUT"];
-const MAX_OVERRIDES = 10;
-
-function coerceOverrides(raw: unknown): OverrideHint[] | null | "invalid" {
-  if (raw === undefined || raw === null) return null;
-  if (!Array.isArray(raw)) return "invalid";
-  const out: OverrideHint[] = [];
-  for (const item of raw.slice(0, MAX_OVERRIDES)) {
-    if (!item || typeof item !== "object") return "invalid";
-    const r = item as Record<string, unknown>;
-    if (typeof r.shortDescription !== "string") return "invalid";
-    if (typeof r.originalScore !== "number") return "invalid";
-    if (typeof r.originalRating !== "string" || !VALID_RATINGS.includes(r.originalRating as Rating)) return "invalid";
-    if (typeof r.userRating !== "string" || !VALID_RATINGS.includes(r.userRating as Rating)) return "invalid";
-    out.push({
-      shortDescription: r.shortDescription.slice(0, 300),
-      originalScore: r.originalScore,
-      originalRating: r.originalRating as Rating,
-      userRating: r.userRating as Rating,
-    });
-  }
-  return out;
 }
 
 export async function POST(req: NextRequest) {
@@ -96,17 +72,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const overrides = coerceOverrides(body?.overrides);
-  if (overrides === "invalid") {
-    return NextResponse.json(
-      { error: "overrides must be an array of { shortDescription, originalScore, originalRating, userRating }" },
-      { status: 400 },
-    );
-  }
-
   try {
     const response = await callProvider("anthropic", apiKey, model, {
-      system: buildCullPrompt(intent, profile, overrides),
+      system: buildCullPrompt(intent, profile),
       images,
       textParts,
       maxTokens,
