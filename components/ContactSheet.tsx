@@ -9,6 +9,7 @@ import {
 import { runCull, runDeepReview, runCompare } from "@/lib/api";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
 import { useOverrides } from "@/hooks/useOverrides";
+import { selectFewShot } from "@/lib/overrides";
 import { generateTasteProfile } from "@/lib/taste-library";
 import { computePhotoHash } from "@/lib/photo-hash";
 import { loadSessionIntent, saveSessionIntent } from "@/lib/session-intent";
@@ -44,7 +45,7 @@ export default function ContactSheet() {
 
   // Taste library (Pro-only profile injection — soft bias under intent)
   const { library: tasteLibrary, setProfile: setTasteProfile, setLastRegenAt: setTasteLastRegenAt } = useTasteLibrary();
-  const { add: addOverride } = useOverrides();
+  const { store: overridesStore, add: addOverride } = useOverrides();
 
   // Provider
   const [config, setConfig] = useState<ProviderConfig | null>(() => loadProviderConfig());
@@ -249,11 +250,19 @@ export default function ContactSheet() {
       const profile = !ignoreTasteProfile && tasteLibrary.currentProfile
         ? { prose: tasteLibrary.currentProfile.prose, aestheticTags: tasteLibrary.currentProfile.aestheticTags }
         : null;
+      const overrideHints = isPro
+        ? selectFewShot(overridesStore, effectiveIntent.preset, 8).map(o => ({
+            shortDescription: o.shortDescription,
+            originalRating: o.originalRating,
+            originalScore: o.originalScore,
+            userRating: o.userRating,
+          }))
+        : [];
       const results = await runCull(target, config, effectiveIntent, (msg, batch, total) => {
         setProgressMsg(msg);
         setProgressPct(Math.round(((batch + 1) / total) * 100));
         setProgressDone(Math.min(batch * CULL_BATCH_SIZE, target.length));
-      }, profile);
+      }, profile, overrideHints.length > 0 ? overrideHints : null);
       setProgressDone(target.length);
       setCullResults(results);
       if (tier === "free") incrementFreeUsage(target.length);
@@ -277,7 +286,7 @@ export default function ContactSheet() {
       setPhase(Object.keys(cullResults).length > 0 ? "culled" : "empty");
       setProgressMsg("");
     }
-  }, [config, photos, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, ignoreTasteProfile, maybeAutoRegenProfile]);
+  }, [config, photos, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, ignoreTasteProfile, maybeAutoRegenProfile, overridesStore]);
 
   // ── Deep review ─────────────────────────────────────────────────────────
 
