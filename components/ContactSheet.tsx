@@ -485,8 +485,17 @@ export default function ContactSheet() {
     // empty for now is fine — selectFewShot still ranks by recency + intent.
     const cull = cullResults[index];
     const photo = photos[index];
-    if (!cull || !photo || cull.rating === rating || !intentPreset) return;
+    if (!cull || !photo || !intentPreset) return;
     if (!photo.base64) return; // restored sessions: no pixels to hash
+
+    // User reverted to the AI's original rating — clean up any saved
+    // override for this frame so it stops weighting future culls.
+    if (cull.rating === rating) {
+      computePhotoHash(photo)
+        .then(({ hash }) => removeOverride(hash))
+        .catch(() => { /* hash failure is harmless here */ });
+      return;
+    }
 
     computePhotoHash(photo).then(async ({ hash, image }) => {
       const baseEntry = {
@@ -529,7 +538,7 @@ export default function ContactSheet() {
         // describe is best-effort; selectFewShot still ranks empty-desc entries
       }
     }).catch(() => { /* hash failure shouldn't block UI override */ });
-  }, [cullResults, photos, intentPreset, addOverride, ratingOverrides]);
+  }, [cullResults, photos, intentPreset, addOverride, removeOverride, ratingOverrides]);
 
   // ── Main area drag-and-drop ──────────────────────────────────────────────
 
