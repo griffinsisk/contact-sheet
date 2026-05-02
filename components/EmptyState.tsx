@@ -21,6 +21,7 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
   const isPro = user?.publicMetadata?.tier === "pro";
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
+  const [seedModalScrollToProfile, setSeedModalScrollToProfile] = useState(false);
   const [library, setLibrary] = useState<TasteLibrary | null>(null);
 
   useEffect(() => {
@@ -249,12 +250,22 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
               </>
             )}
           </div>
-          <button
-            onClick={() => setShowSeedModal(true)}
-            className="shrink-0 bg-transparent border border-outline-variant text-on-surface hover:bg-surface-high px-6 py-3 mono-label text-[11px] uppercase tracking-widest font-bold transition-colors duration-200"
-          >
-            {profile ? "Manage Library" : "Upload Favorites"}
-          </button>
+          <div className="shrink-0 flex items-center gap-2">
+            {profile && (
+              <button
+                onClick={() => { setSeedModalScrollToProfile(true); setShowSeedModal(true); }}
+                className="bg-transparent border border-outline-variant text-on-surface hover:bg-surface-high px-6 py-3 mono-label text-[11px] uppercase tracking-widest font-bold transition-colors duration-200"
+              >
+                View Profile
+              </button>
+            )}
+            <button
+              onClick={() => { setSeedModalScrollToProfile(false); setShowSeedModal(true); }}
+              className="bg-transparent border border-outline-variant text-on-surface hover:bg-surface-high px-6 py-3 mono-label text-[11px] uppercase tracking-widest font-bold transition-colors duration-200"
+            >
+              {profile ? "Manage Library" : "Upload Favorites"}
+            </button>
+          </div>
         </div>
 
         {/* Step 02 — drop photos (hidden for Pro: only one action remains, dropzone speaks for itself) */}
@@ -394,7 +405,12 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
         </section>
       )}
 
-      {showSeedModal && <SeedUploadModal onClose={() => setShowSeedModal(false)} />}
+      {showSeedModal && (
+        <SeedUploadModal
+          onClose={() => setShowSeedModal(false)}
+          scrollToProfile={seedModalScrollToProfile}
+        />
+      )}
     </main>
   );
 }

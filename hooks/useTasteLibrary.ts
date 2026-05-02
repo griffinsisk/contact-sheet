@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  TASTE_LIBRARY_CHANGED_EVENT,
   TasteEntry,
   TasteLibrary,
   TasteProfile,
@@ -24,6 +25,9 @@ export function useTasteLibrary(): UseTasteLibrary {
 
   useEffect(() => {
     setLibrary(getTasteLibraryClient());
+    const onChange = () => setLibrary(getTasteLibraryClient());
+    window.addEventListener(TASTE_LIBRARY_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(TASTE_LIBRARY_CHANGED_EVENT, onChange);
   }, []);
 
   const persist = useCallback((next: TasteLibrary) => {

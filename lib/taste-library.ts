@@ -60,10 +60,13 @@ export function getTasteLibraryClient(): TasteLibrary {
   }
 }
 
+export const TASTE_LIBRARY_CHANGED_EVENT = "cs-taste-library-changed";
+
 export function setTasteLibraryClient(library: TasteLibrary): void {
   if (typeof window === "undefined") return;
   const next = evictFifo(library);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent(TASTE_LIBRARY_CHANGED_EVENT));
 }
 
 /**

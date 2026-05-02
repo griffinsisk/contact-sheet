@@ -9,6 +9,7 @@ const REGEN_THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 interface Props {
   onClose: () => void;
+  scrollToProfile?: boolean;
 }
 
 const MIN_FILES = 8;
@@ -51,11 +52,12 @@ async function downsizeFileTo512(file: File): Promise<{ bytes: Uint8Array; base6
   }
 }
 
-export default function SeedUploadModal({ onClose }: Props) {
+export default function SeedUploadModal({ onClose, scrollToProfile = false }: Props) {
   const { addEntries, library, setProfile, setLastRegenAt } = useTasteLibrary();
   const { user } = useUser();
   const isPro = user?.publicMetadata?.tier === "pro";
   const inputRef = useRef<HTMLInputElement>(null);
+  const profileSectionRef = useRef<HTMLDivElement>(null);
   const [staged, setStaged] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hashing, setHashing] = useState(false);
@@ -202,6 +204,11 @@ export default function SeedUploadModal({ onClose }: Props) {
     }
     runProfileGeneration();
   }, [doneCount, profileStatus, library.entries, runProfileGeneration]);
+
+  useEffect(() => {
+    if (!scrollToProfile) return;
+    profileSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [scrollToProfile]);
 
   const handleManualRegen = useCallback(async () => {
     if (regenPending) return;
@@ -402,7 +409,7 @@ export default function SeedUploadModal({ onClose }: Props) {
 
             {/* Manual regen — only when library already has usable entries and Pro */}
             {canManualRegen && (
-              <div className="mt-6 pt-6 border-t border-outline-variant/30">
+              <div ref={profileSectionRef} className="mt-6 pt-6 border-t border-outline-variant/30">
                 <div className="flex justify-between items-center mb-3">
                   <div>
                     <div className="font-label text-[11px] text-on-surface uppercase tracking-widest font-bold">
