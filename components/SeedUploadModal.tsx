@@ -3,8 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { TasteEntry, contentHash, generateTasteProfile, getTasteLibraryClient } from "@/lib/taste-library";
-import { getOverridesClient } from "@/lib/overrides";
+import { bucketDelta } from "@/lib/overrides";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
+import { useOverrides } from "@/hooks/useOverrides";
+import type { OverrideEntry } from "@/lib/overrides";
+import type { Rating } from "@/lib/types";
+
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 const REGEN_THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 hours
 
@@ -139,8 +155,7 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
     try {
       // Re-read storage to include just-added entries even if hook state hasn't re-rendered yet.
       const fresh = getTasteLibraryClient();
-      const freshCorrections = getOverridesClient().entries;
-      const { profile, coherence, usedEntryCount } = await generateTasteProfile(fresh, freshCorrections);
+      const { profile, coherence, usedEntryCount } = await generateTasteProfile(fresh, overridesStore.entries);
       if (profile) {
         setProfile(profile);
         setLastRegenAt(Date.now());
@@ -225,11 +240,18 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
     }
   }, [regenPending, library.lastRegenAt, runProfileGeneration]);
 
+  const { store: overridesStore, remove: removeOverride } = useOverrides();
+  const correctionEntries = [...overridesStore.entries].sort((a, b) => b.timestamp - a.timestamp);
+  const correctionSignalCount = correctionEntries.filter((e) => e.shortDescription.trim().length > 0).length;
+  // Corrections added/changed after the last profile regen still need a fresh
+  // regen to actually shape the AI's read. Surface that pending state honestly.
+  const lastRegenAt = library.lastRegenAt ?? 0;
+  const pendingCorrectionCount = correctionEntries.filter(
+    (e) => e.shortDescription.trim().length > 0 && e.timestamp > lastRegenAt,
+  ).length;
+
   const usableEntryCount = library.entries.filter((e) => !!e.image).length;
   const canManualRegen = isPro && usableEntryCount >= 4 && doneCount === null;
-  const correctionSignalCount = typeof window !== "undefined"
-    ? getOverridesClient().entries.filter((e) => e.shortDescription.trim().length > 0).length
-    : 0;
 
   const stagedValid = staged.length >= MIN_FILES && staged.length <= MAX_FILES;
 
@@ -463,6 +485,81 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
                         ))}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {correctionEntries.length > 0 && (
+                  <div className="mt-6 pt-5 border-t border-outline-variant/30">
+                    <div className="mb-3">
+                      <div className="font-label text-[11px] text-on-surface uppercase tracking-widest font-bold">
+                        Corrections feeding this profile
+                      </div>
+                      <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
+                        {correctionEntries.length} {correctionEntries.length === 1 ? "signal" : "signals"}
+                        {pendingCorrectionCount > 0 && (
+                          <span className="text-primary">
+                            {" · "}{pendingCorrectionCount} pending — regen to apply
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {correctionEntries.map((e: OverrideEntry) => {
+                        const delta = bucketDelta(e.originalRating, e.userRating);
+                        const isBoost = delta > 0;
+                        const absDelta = Math.abs(delta);
+                        const directionLabel = isBoost ? "Boost" : "Demote";
+                        const directionIcon = isBoost ? "north_east" : "south_east";
+                        const directionClass = isBoost ? "text-primary" : "text-error";
+                        const isPending = e.timestamp > lastRegenAt;
+                        return (
+                          <div
+                            key={e.photoHash + e.timestamp}
+                            className="flex items-start gap-3 p-3 bg-surface-low border-l-2 border-outline-variant"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                                <span className={`flex items-center gap-1 font-label text-[10px] uppercase tracking-widest font-bold ${directionClass}`}>
+                                  <span className="material-symbols-outlined text-[12px]">{directionIcon}</span>
+                                  {directionLabel}
+                                </span>
+                                <span className="font-label text-[10px] text-on-surface-variant">·</span>
+                                <span className="px-1.5 py-0.5 bg-surface-high text-on-surface font-label text-[9px] uppercase tracking-widest">
+                                  {e.sessionIntent}
+                                </span>
+                                <span className="font-label text-[10px] text-on-surface-variant">·</span>
+                                <span className="font-mono text-[10px] text-on-surface">
+                                  {e.originalRating} → <span className={`font-bold ${directionClass}`}>{e.userRating}</span>
+                                </span>
+                                <span className="font-label text-[10px] text-on-surface-variant">·</span>
+                                <span className="font-label text-[10px] text-on-surface-variant">
+                                  {isBoost ? "+" : "−"}{absDelta} {absDelta === 1 ? "bucket" : "buckets"}
+                                </span>
+                                {isPending && (
+                                  <span className="font-label text-[9px] uppercase tracking-widest text-primary">
+                                    · pending
+                                  </span>
+                                )}
+                              </div>
+                              <div className="font-body text-[11px] text-on-surface-variant italic leading-snug">
+                                {e.shortDescription || <span className="opacity-60">Describing…</span>}
+                              </div>
+                              <div className="font-label text-[9px] uppercase tracking-widest text-on-surface-variant/70 mt-1">
+                                {relativeTime(e.timestamp)}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeOverride(e.photoHash)}
+                              aria-label="Delete correction"
+                              title="Delete this correction"
+                              className="text-on-surface-variant hover:text-error transition-colors flex-shrink-0 p-1"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
