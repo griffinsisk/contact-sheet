@@ -433,6 +433,26 @@ export default function SeedUploadModal({ onClose }: Props) {
                 {profileStatus === "skipped" && profileMsg && (
                   <p className="font-body text-[11px] text-on-surface-variant mt-2">{profileMsg}</p>
                 )}
+
+                {library.currentProfile && (
+                  <div className="mt-5 space-y-3">
+                    <p className="font-body text-sm text-on-surface leading-relaxed whitespace-pre-wrap">
+                      {library.currentProfile.prose}
+                    </p>
+                    {library.currentProfile.aestheticTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {library.currentProfile.aestheticTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest px-2 py-1 bg-surface-high"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </>
