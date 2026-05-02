@@ -229,6 +229,10 @@ export default function SeedUploadModal({ onClose }: Props) {
     <div
       className="fixed inset-0 z-[60] bg-background/90 backdrop-blur-sm flex items-center justify-center"
       onKeyDown={(e) => { if (e.key === "Escape" && !hashing) onClose(); }}
+      onDragEnter={(e) => e.stopPropagation()}
+      onDragLeave={(e) => e.stopPropagation()}
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); }}
       tabIndex={-1}
       ref={(el: HTMLDivElement | null) => el?.focus()}
     >
