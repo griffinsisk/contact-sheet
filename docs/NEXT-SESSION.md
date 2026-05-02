@@ -1,12 +1,12 @@
 # Next Session — Open Phase B PR → main
 
-**Branch:** `feature/taste-library` at `1d3d608` (local; needs push).
+**Branch:** `feature/taste-library` (local; 4 commits ahead of origin, needs push). Run `git log --oneline -6` to see HEAD.
 **Prod:** still Phase A at https://contact-sheet-three.vercel.app.
 **Validation status:** Phase B preview tested 2026-05-02, working end-to-end. Profile generates from seed, alignment indicator renders, opt-out works, History/SessionsModal opens, ratingOverrides honored in exports. 4-of-4 PASS still holds.
 
 ## Pickup point
 
-1. **Push branch** (two new commits since origin):
+1. **Push branch** (4 commits ahead of origin):
    ```bash
    cd "/Users/griffin.sisk/Desktop/AI Projects/contact-sheet-repo"
    git push origin feature/taste-library
@@ -45,6 +45,8 @@
 
 ## Recent commits (since pickup baseline)
 
+- (HEAD) docs(next-session): correct branch state, drop self-referential SHAs
+- `304b0e1` docs(next-session): scaffold for PR-opening session
 - `1d3d608` feat(taste-library): split cull note body from profile alignment line
 - `72517a3` feat(taste-library): regen status indicator + disable cull during regen
 - `27da71d` docs(next-session): pickup point for Phase B preview test → PR → merge
@@ -57,8 +59,8 @@
 
 ```bash
 cd "/Users/griffin.sisk/Desktop/AI Projects/contact-sheet-repo"
-git status                # clean, 2 commits ahead of origin
-git log --oneline -5      # 1d3d608 at HEAD
+git status                # clean, 4 commits ahead of origin
+git log --oneline -6      # confirm last 6 commits match section below
 npx tsc --noEmit          # clean
 ```
 
