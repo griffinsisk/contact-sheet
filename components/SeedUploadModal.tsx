@@ -9,7 +9,7 @@ const REGEN_THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 interface Props {
   onClose: () => void;
-  scrollToProfile?: boolean;
+  mode?: "manage" | "view";
 }
 
 const MIN_FILES = 8;
@@ -52,12 +52,12 @@ async function downsizeFileTo512(file: File): Promise<{ bytes: Uint8Array; base6
   }
 }
 
-export default function SeedUploadModal({ onClose, scrollToProfile = false }: Props) {
+export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
+  const isViewOnly = mode === "view";
   const { addEntries, library, setProfile, setLastRegenAt } = useTasteLibrary();
   const { user } = useUser();
   const isPro = user?.publicMetadata?.tier === "pro";
   const inputRef = useRef<HTMLInputElement>(null);
-  const profileSectionRef = useRef<HTMLDivElement>(null);
   const [staged, setStaged] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hashing, setHashing] = useState(false);
@@ -205,10 +205,6 @@ export default function SeedUploadModal({ onClose, scrollToProfile = false }: Pr
     runProfileGeneration();
   }, [doneCount, profileStatus, library.entries, runProfileGeneration]);
 
-  useEffect(() => {
-    if (!scrollToProfile) return;
-    profileSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [scrollToProfile]);
 
   const handleManualRegen = useCallback(async () => {
     if (regenPending) return;
@@ -248,13 +244,15 @@ export default function SeedUploadModal({ onClose, scrollToProfile = false }: Pr
           <div>
             <div className="mono-label text-[10px] text-primary mb-2 flex items-center gap-2">
               <span className="w-2 h-2 bg-primary" />
-              TASTE LIBRARY
+              {isViewOnly ? "TASTE PROFILE" : "TASTE LIBRARY"}
             </div>
             <h1 className="text-4xl serif-italic text-on-surface">
-              Seed your favorites
+              {isViewOnly ? "Your taste profile" : "Seed your favorites"}
             </h1>
             <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-2">
-              Pick {MIN_FILES}–{MAX_FILES} photos that represent how you see
+              {isViewOnly
+                ? "How future culls read your eye"
+                : `Pick ${MIN_FILES}–${MAX_FILES} photos that represent how you see`}
             </p>
           </div>
           <button
@@ -320,6 +318,7 @@ export default function SeedUploadModal({ onClose, scrollToProfile = false }: Pr
           </div>
         ) : (
           <>
+            {!isViewOnly && (<>
             <div
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
@@ -406,10 +405,11 @@ export default function SeedUploadModal({ onClose, scrollToProfile = false }: Pr
                 {hashing ? "ADDING…" : "ADD TO LIBRARY"}
               </button>
             </div>
+            </>)}
 
             {/* Manual regen — only when library already has usable entries and Pro */}
             {canManualRegen && (
-              <div ref={profileSectionRef} className="mt-6 pt-6 border-t border-outline-variant/30">
+              <div className={isViewOnly ? "" : "mt-6 pt-6 border-t border-outline-variant/30"}>
                 <div className="flex justify-between items-center mb-3">
                   <div>
                     <div className="font-label text-[11px] text-on-surface uppercase tracking-widest font-bold">
@@ -461,6 +461,15 @@ export default function SeedUploadModal({ onClose, scrollToProfile = false }: Pr
                   </div>
                 )}
               </div>
+            )}
+
+            {isViewOnly && (
+              <button
+                onClick={onClose}
+                className="mt-8 w-full bg-primary text-on-primary py-4 mono-label font-bold text-sm tracking-widest hover:brightness-110 active:scale-[0.98] transition-all"
+              >
+                CLOSE
+              </button>
             )}
           </>
         )}

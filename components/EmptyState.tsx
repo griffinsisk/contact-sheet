@@ -21,7 +21,7 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
   const isPro = user?.publicMetadata?.tier === "pro";
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
-  const [seedModalScrollToProfile, setSeedModalScrollToProfile] = useState(false);
+  const [seedModalMode, setSeedModalMode] = useState<"manage" | "view">("manage");
   const [library, setLibrary] = useState<TasteLibrary | null>(null);
 
   useEffect(() => {
@@ -253,14 +253,14 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
           <div className="shrink-0 flex items-center gap-2">
             {profile && (
               <button
-                onClick={() => { setSeedModalScrollToProfile(true); setShowSeedModal(true); }}
+                onClick={() => { setSeedModalMode("view"); setShowSeedModal(true); }}
                 className="bg-transparent border border-outline-variant text-on-surface hover:bg-surface-high px-6 py-3 mono-label text-[11px] uppercase tracking-widest font-bold transition-colors duration-200"
               >
                 View Profile
               </button>
             )}
             <button
-              onClick={() => { setSeedModalScrollToProfile(false); setShowSeedModal(true); }}
+              onClick={() => { setSeedModalMode("manage"); setShowSeedModal(true); }}
               className="bg-transparent border border-outline-variant text-on-surface hover:bg-surface-high px-6 py-3 mono-label text-[11px] uppercase tracking-widest font-bold transition-colors duration-200"
             >
               {profile ? "Manage Library" : "Upload Favorites"}
@@ -408,7 +408,7 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
       {showSeedModal && (
         <SeedUploadModal
           onClose={() => setShowSeedModal(false)}
-          scrollToProfile={seedModalScrollToProfile}
+          mode={seedModalMode}
         />
       )}
     </main>
