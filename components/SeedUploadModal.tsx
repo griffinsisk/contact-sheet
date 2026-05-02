@@ -144,6 +144,16 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
     e.target.value = "";
   }, [acceptFiles]);
 
+  const { store: overridesStore, remove: removeOverride } = useOverrides();
+  const correctionEntries = [...overridesStore.entries].sort((a, b) => b.timestamp - a.timestamp);
+  const correctionSignalCount = correctionEntries.filter((e) => e.shortDescription.trim().length > 0).length;
+  // Corrections added/changed after the last profile regen still need a fresh
+  // regen to actually shape the AI's read. Surface that pending state honestly.
+  const lastRegenAt = library.lastRegenAt ?? 0;
+  const pendingCorrectionCount = correctionEntries.filter(
+    (e) => e.shortDescription.trim().length > 0 && e.timestamp > lastRegenAt,
+  ).length;
+
   const runProfileGeneration = useCallback(async () => {
     if (!isPro) {
       setProfileStatus("skipped");
@@ -242,16 +252,6 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
       setRegenPending(false);
     }
   }, [regenPending, library.lastRegenAt, pendingCorrectionCount, runProfileGeneration]);
-
-  const { store: overridesStore, remove: removeOverride } = useOverrides();
-  const correctionEntries = [...overridesStore.entries].sort((a, b) => b.timestamp - a.timestamp);
-  const correctionSignalCount = correctionEntries.filter((e) => e.shortDescription.trim().length > 0).length;
-  // Corrections added/changed after the last profile regen still need a fresh
-  // regen to actually shape the AI's read. Surface that pending state honestly.
-  const lastRegenAt = library.lastRegenAt ?? 0;
-  const pendingCorrectionCount = correctionEntries.filter(
-    (e) => e.shortDescription.trim().length > 0 && e.timestamp > lastRegenAt,
-  ).length;
 
   const usableEntryCount = library.entries.filter((e) => !!e.image).length;
   const canManualRegen = isPro && usableEntryCount >= 4 && doneCount === null;
