@@ -8,7 +8,9 @@ import {
 } from "@/lib/types";
 import { runCull, runDeepReview, runCompare } from "@/lib/api";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
+import { useOverrides } from "@/hooks/useOverrides";
 import { generateTasteProfile } from "@/lib/taste-library";
+import { computePhotoHash } from "@/lib/photo-hash";
 import { loadSessionIntent, saveSessionIntent } from "@/lib/session-intent";
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "@/lib/constants";
 import { resolveTier, canProcessPhotos, incrementFreeUsage, getFreeUsage } from "@/lib/tier";
@@ -42,6 +44,7 @@ export default function ContactSheet() {
 
   // Taste library (Pro-only profile injection — soft bias under intent)
   const { library: tasteLibrary, setProfile: setTasteProfile, setLastRegenAt: setTasteLastRegenAt } = useTasteLibrary();
+  const { add: addOverride } = useOverrides();
 
   // Provider
   const [config, setConfig] = useState<ProviderConfig | null>(() => loadProviderConfig());
@@ -455,7 +458,27 @@ export default function ContactSheet() {
 
   const handleRatingOverride = useCallback((index: number, rating: Rating) => {
     setRatingOverrides(prev => ({ ...prev, [index]: rating }));
-  }, []);
+
+    // Capture as Phase C override entry when there's an AI rating to disagree with
+    // and the user actually changed it. shortDescription is filled in by Step 2;
+    // empty for now is fine — selectFewShot still ranks by recency + intent.
+    const cull = cullResults[index];
+    const photo = photos[index];
+    if (!cull || !photo || cull.rating === rating || !intentPreset) return;
+    if (!photo.base64) return; // restored sessions: no pixels to hash
+
+    computePhotoHash(photo).then(({ hash }) => {
+      addOverride({
+        photoHash: hash,
+        shortDescription: "",
+        sessionIntent: intentPreset,
+        originalScore: cull.score,
+        originalRating: cull.rating,
+        userRating: rating,
+        timestamp: Date.now(),
+      });
+    }).catch(() => { /* hash failure shouldn't block UI override */ });
+  }, [cullResults, photos, intentPreset, addOverride]);
 
   // ── Main area drag-and-drop ──────────────────────────────────────────────
 
