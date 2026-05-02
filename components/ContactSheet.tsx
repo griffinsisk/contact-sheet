@@ -71,6 +71,9 @@ export default function ContactSheet() {
   // Taste profile regen status (used to gate cull while auto-regen runs)
   const [regenStatus, setRegenStatus] = useState<"idle" | "generating">("idle");
 
+  // First-override toast (one-time per browser, dismiss-on-show)
+  const [showOverrideToast, setShowOverrideToast] = useState(false);
+
   // Hydrate intent from sessionStorage after mount (avoids SSR hydration mismatch)
   useEffect(() => {
     const saved = loadSessionIntent();
@@ -488,6 +491,13 @@ export default function ContactSheet() {
       };
       addOverride(baseEntry);
 
+      // First-time toast so the user knows their correction sticks
+      if (typeof window !== "undefined" && !localStorage.getItem("cs-overrides-toast-seen")) {
+        localStorage.setItem("cs-overrides-toast-seen", "1");
+        setShowOverrideToast(true);
+        setTimeout(() => setShowOverrideToast(false), 6000);
+      }
+
       // Backfill shortDescription via tiny model call (Pro-gated server-side).
       try {
         const res = await fetch("/api/override-describe", {
@@ -766,6 +776,20 @@ export default function ContactSheet() {
               </div>
             )}
 
+            {isPro && intentPreset && (() => {
+              const count = selectFewShot(overridesStore, intentPreset, 8)
+                .filter(o => o.shortDescription.trim().length > 0).length;
+              if (count === 0) return null;
+              return (
+                <div className="mt-3 flex items-center justify-end gap-2 text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[14px]">tune</span>
+                  <span className="font-label text-[11px] uppercase tracking-widest">
+                    {count} past {count === 1 ? "correction" : "corrections"} will inform this cull
+                  </span>
+                </div>
+              );
+            })()}
+
             <div className="pt-4 border-t border-outline-variant">
               <IntentPicker
                 preset={intentPreset}
@@ -987,6 +1011,32 @@ export default function ContactSheet() {
           onRestore={handleRestoreSession}
           onClose={() => setShowSessions(false)}
         />
+      )}
+
+      {/* First-override toast — shown once per browser when a user first
+          changes an AI rating. Tells them the correction will weight future culls. */}
+      {showOverrideToast && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-50 max-w-sm bg-surface-highest border-l-2 border-primary shadow-lg px-4 py-3 flex items-start gap-3"
+        >
+          <span className="material-symbols-outlined text-[18px] text-primary mt-0.5">tune</span>
+          <div className="flex-1 min-w-0">
+            <div className="font-label text-[11px] uppercase tracking-widest text-on-surface mb-1">
+              Correction saved
+            </div>
+            <div className="font-body text-[12px] text-on-surface-variant">
+              Future culls in similar shoots will weight toward your rating.
+            </div>
+          </div>
+          <button
+            onClick={() => setShowOverrideToast(false)}
+            aria-label="Dismiss"
+            className="text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0"
+          >
+            <span className="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        </div>
       )}
     </div>
   );
