@@ -28,6 +28,42 @@ function detectProfileAlignment(note: string): ProfileAlignment | null {
   return null;
 }
 
+// Splits a cull note into the frame analysis and the profile-alignment closing
+// sentence so the UI can render them as separate paragraphs.
+function splitProfileLine(note: string): { body: string; closing: string | null } {
+  if (!note) return { body: "", closing: null };
+  const phrases = [
+    "Aligns with your library",
+    "Diverges from your library",
+    "Outside your library",
+  ];
+  for (const phrase of phrases) {
+    // Case-insensitive match; locate phrase regardless of casing.
+    const idx = note.toLowerCase().indexOf(phrase.toLowerCase());
+    if (idx === -1) continue;
+    // Back up to the start of the sentence (after the previous ". ", "! ", "? ").
+    let start = idx;
+    while (start > 0) {
+      const slice = note.slice(0, start);
+      const lastBreak = Math.max(
+        slice.lastIndexOf(". "),
+        slice.lastIndexOf("! "),
+        slice.lastIndexOf("? "),
+      );
+      if (lastBreak === -1) {
+        start = 0;
+      } else {
+        start = lastBreak + 2;
+      }
+      break;
+    }
+    const body = note.slice(0, start).trim();
+    const closing = note.slice(start).trim();
+    return { body, closing: closing.length > 0 ? closing : null };
+  }
+  return { body: note, closing: null };
+}
+
 const RATING_OPTIONS: { rating: Rating; color: string; activeColor: string }[] = [
   { rating: "HERO", color: "text-primary", activeColor: "bg-primary text-on-primary" },
   { rating: "SELECT", color: "text-secondary", activeColor: "bg-secondary text-on-secondary" },
@@ -253,9 +289,23 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
                 </div>
               );
             })()}
-            <p className="font-body text-sm text-on-surface/80 leading-relaxed">
-              {cull.reason}
-            </p>
+            {(() => {
+              const { body, closing } = splitProfileLine(cull.reason);
+              return (
+                <>
+                  {body && (
+                    <p className="font-body text-sm text-on-surface/80 leading-relaxed">
+                      {body}
+                    </p>
+                  )}
+                  {closing && (
+                    <p className="mt-3 font-body text-sm text-on-surface-variant italic leading-relaxed">
+                      {closing}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 
