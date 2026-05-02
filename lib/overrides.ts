@@ -62,6 +62,17 @@ export function recordOverride(entry: OverrideEntry): void {
   setOverridesClient({ ...current, entries: [...filtered, entry] });
 }
 
+export function removeOverride(photoHash: string): void {
+  const current = getOverridesClient();
+  const filtered = current.entries.filter((e) => e.photoHash !== photoHash);
+  if (filtered.length === current.entries.length) return;
+  setOverridesClient({ ...current, entries: filtered });
+}
+
+export function clearAllOverrides(): void {
+  setOverridesClient(emptyStore());
+}
+
 /**
  * Pick the most relevant overrides for a cull request, weighting by
  * matching sessionIntent. Returns up to `limit`, recency-sorted within

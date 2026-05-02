@@ -45,7 +45,7 @@ export default function ContactSheet() {
 
   // Taste library (Pro-only profile injection — soft bias under intent)
   const { library: tasteLibrary, setProfile: setTasteProfile, setLastRegenAt: setTasteLastRegenAt } = useTasteLibrary();
-  const { store: overridesStore, add: addOverride } = useOverrides();
+  const { store: overridesStore, add: addOverride, remove: removeOverride } = useOverrides();
 
   // Provider
   const [config, setConfig] = useState<ProviderConfig | null>(() => loadProviderConfig());
@@ -71,8 +71,16 @@ export default function ContactSheet() {
   // Taste profile regen status (used to gate cull while auto-regen runs)
   const [regenStatus, setRegenStatus] = useState<"idle" | "generating">("idle");
 
-  // First-override toast (one-time per browser, dismiss-on-show)
-  const [showOverrideToast, setShowOverrideToast] = useState(false);
+  // Override toast — fires on every override with an Undo affordance.
+  // First fire per browser shows expanded educational copy; subsequent fires
+  // are short. The toast carries enough state to revert the last action.
+  const [overrideToast, setOverrideToast] = useState<{
+    photoHash: string;
+    index: number;
+    prevRating: Rating | undefined;
+    isFirst: boolean;
+  } | null>(null);
+  const overrideToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Hydrate intent from sessionStorage after mount (avoids SSR hydration mismatch)
   useEffect(() => {
@@ -469,6 +477,7 @@ export default function ContactSheet() {
   // ── Rating override ─────────────────────────────────────────────────────
 
   const handleRatingOverride = useCallback((index: number, rating: Rating) => {
+    const prevRating = ratingOverrides[index];
     setRatingOverrides(prev => ({ ...prev, [index]: rating }));
 
     // Capture as Phase C override entry when there's an AI rating to disagree with
@@ -491,12 +500,18 @@ export default function ContactSheet() {
       };
       addOverride(baseEntry);
 
-      // First-time toast so the user knows their correction sticks
-      if (typeof window !== "undefined" && !localStorage.getItem("cs-overrides-toast-seen")) {
+      // Fire toast every override; first-fire per browser gets expanded copy.
+      const isFirst = typeof window !== "undefined"
+        && !localStorage.getItem("cs-overrides-toast-seen");
+      if (typeof window !== "undefined" && isFirst) {
         localStorage.setItem("cs-overrides-toast-seen", "1");
-        setShowOverrideToast(true);
-        setTimeout(() => setShowOverrideToast(false), 6000);
       }
+      if (overrideToastTimerRef.current) clearTimeout(overrideToastTimerRef.current);
+      setOverrideToast({ photoHash: hash, index, prevRating, isFirst });
+      overrideToastTimerRef.current = setTimeout(
+        () => setOverrideToast(null),
+        isFirst ? 7000 : 4000,
+      );
 
       // Backfill shortDescription via tiny model call (Pro-gated server-side).
       try {
@@ -514,7 +529,7 @@ export default function ContactSheet() {
         // describe is best-effort; selectFewShot still ranks empty-desc entries
       }
     }).catch(() => { /* hash failure shouldn't block UI override */ });
-  }, [cullResults, photos, intentPreset, addOverride]);
+  }, [cullResults, photos, intentPreset, addOverride, ratingOverrides]);
 
   // ── Main area drag-and-drop ──────────────────────────────────────────────
 
@@ -1013,9 +1028,9 @@ export default function ContactSheet() {
         />
       )}
 
-      {/* First-override toast — shown once per browser when a user first
-          changes an AI rating. Tells them the correction will weight future culls. */}
-      {showOverrideToast && (
+      {/* Override toast — fires on every override with an Undo affordance.
+          First fire per browser shows expanded educational copy. */}
+      {overrideToast && (
         <div
           role="status"
           className="fixed bottom-6 right-6 z-50 max-w-sm bg-surface-highest border-l-2 border-primary shadow-lg px-4 py-3 flex items-start gap-3"
@@ -1025,12 +1040,34 @@ export default function ContactSheet() {
             <div className="font-label text-[11px] uppercase tracking-widest text-on-surface mb-1">
               Correction saved
             </div>
-            <div className="font-body text-[12px] text-on-surface-variant">
-              Future culls in similar shoots will weight toward your rating.
-            </div>
+            {overrideToast.isFirst && (
+              <div className="font-body text-[12px] text-on-surface-variant mb-2">
+                Future culls in similar shoots will weight toward your rating. Manage saved corrections from the header.
+              </div>
+            )}
+            <button
+              onClick={() => {
+                if (!overrideToast) return;
+                removeOverride(overrideToast.photoHash);
+                setRatingOverrides(prev => {
+                  const next = { ...prev };
+                  if (overrideToast.prevRating === undefined) delete next[overrideToast.index];
+                  else next[overrideToast.index] = overrideToast.prevRating;
+                  return next;
+                });
+                if (overrideToastTimerRef.current) clearTimeout(overrideToastTimerRef.current);
+                setOverrideToast(null);
+              }}
+              className="font-label text-[11px] uppercase tracking-widest text-primary hover:text-primary-dim transition-colors"
+            >
+              Undo
+            </button>
           </div>
           <button
-            onClick={() => setShowOverrideToast(false)}
+            onClick={() => {
+              if (overrideToastTimerRef.current) clearTimeout(overrideToastTimerRef.current);
+              setOverrideToast(null);
+            }}
             aria-label="Dismiss"
             className="text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0"
           >
