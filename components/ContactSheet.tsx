@@ -467,8 +467,8 @@ export default function ContactSheet() {
     if (!cull || !photo || cull.rating === rating || !intentPreset) return;
     if (!photo.base64) return; // restored sessions: no pixels to hash
 
-    computePhotoHash(photo).then(({ hash }) => {
-      addOverride({
+    computePhotoHash(photo).then(async ({ hash, image }) => {
+      const baseEntry = {
         photoHash: hash,
         shortDescription: "",
         sessionIntent: intentPreset,
@@ -476,7 +476,24 @@ export default function ContactSheet() {
         originalRating: cull.rating,
         userRating: rating,
         timestamp: Date.now(),
-      });
+      };
+      addOverride(baseEntry);
+
+      // Backfill shortDescription via tiny model call (Pro-gated server-side).
+      try {
+        const res = await fetch("/api/override-describe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image }),
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (typeof json?.description === "string" && json.description) {
+          addOverride({ ...baseEntry, shortDescription: json.description });
+        }
+      } catch {
+        // describe is best-effort; selectFewShot still ranks empty-desc entries
+      }
     }).catch(() => { /* hash failure shouldn't block UI override */ });
   }, [cullResults, photos, intentPreset, addOverride]);
 
