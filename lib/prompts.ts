@@ -1,4 +1,11 @@
-import { IntentPreset, SessionIntent } from "./types";
+import { IntentPreset, Rating, SessionIntent } from "./types";
+
+export interface OverrideHint {
+  shortDescription: string;
+  originalRating: Rating;
+  originalScore: number;
+  userRating: Rating;
+}
 
 // ── Intent-conditional craft guidance ───────────────────────────────────────
 // Source of truth: docs/RUBRIC.md § "How intent modifies the rubric"
@@ -50,6 +57,20 @@ const INTENT_CRAFT_RULES: Record<IntentPreset, string> = {
 - A sharp bird photo: grade as if intent were wildlife. A grainy candid: grade as if intent were film/documentary. A composed vista: grade as if intent were landscape.
 - When a frame's apparent intent is unclear, grade CRAFT on whether the photographer seemed to land whatever they were attempting.`,
 };
+
+function overridesSection(overrides?: OverrideHint[] | null): string {
+  if (!overrides || overrides.length === 0) return "";
+  const lines = overrides
+    .filter(o => o.shortDescription.trim().length > 0)
+    .map(o => `- "${o.shortDescription}" — you rated ${o.originalRating} (${o.originalScore}), photographer corrected to ${o.userRating}`);
+  if (lines.length === 0) return "";
+  return `\nPAST OVERRIDES FROM THIS PHOTOGRAPHER:
+These are frames where this photographer disagreed with your earlier read. Treat them as ground truth for this photographer's edge cases — when a frame in the current batch closely parallels one of these, weight toward their corrected rating.
+
+${lines.join("\n")}
+
+Apply softly: these calibrate edge-case readings, not blanket rules. Don't force unrelated frames into the same bucket; shift weight only when the parallel is genuinely close (similar subject, similar light, similar moment).\n`;
+}
 
 function tasteSection(profile?: { prose: string; aestheticTags: string[] } | null): string {
   if (!profile || profile.aestheticTags.length === 0) return "";
@@ -178,8 +199,9 @@ const CULL_JSON_TAIL = `Respond ONLY with valid JSON (no markdown, no backticks,
 export function buildCullPrompt(
   intent: SessionIntent | null,
   profile?: { prose: string; aestheticTags: string[] } | null,
+  overrides?: OverrideHint[] | null,
 ): string {
-  return `${CULL_BASE}\n${tasteSection(profile)}${intentSection(intent)}\n${RUBRIC_BODY}\n\n${CULL_JSON_TAIL}`;
+  return `${CULL_BASE}\n${tasteSection(profile)}${overridesSection(overrides)}${intentSection(intent)}\n${RUBRIC_BODY}\n\n${CULL_JSON_TAIL}`;
 }
 
 /** Legacy export — callers that don't plumb intent get the mixed/per-frame fallback. */

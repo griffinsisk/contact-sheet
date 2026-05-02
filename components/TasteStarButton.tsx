@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Photo, Rating } from "@/lib/types";
-import { downsizeForCull } from "@/lib/resize";
-import { contentHash } from "@/lib/taste-library";
+import { computePhotoHash, getCachedHash, type CachedHash } from "@/lib/photo-hash";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
 
 interface Props {
@@ -13,28 +12,9 @@ interface Props {
   className?: string;
 }
 
-interface CachedHash {
-  hash: string;
-  image: string;
-}
-const hashCache = new Map<string, CachedHash>();
-
-async function computePhotoHash(photo: Photo): Promise<CachedHash> {
-  const cached = hashCache.get(photo.id);
-  if (cached) return cached;
-  const b64 = await downsizeForCull(photo);
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const hash = await contentHash(bytes);
-  const entry = { hash, image: b64 };
-  hashCache.set(photo.id, entry);
-  return entry;
-}
-
 export default function TasteStarButton({ photo, rating, size = "md", className = "" }: Props) {
   const { isFavorited, toggleFavorite } = useTasteLibrary();
-  const [cached, setCached] = useState<CachedHash | null>(() => hashCache.get(photo.id) ?? null);
+  const [cached, setCached] = useState<CachedHash | null>(() => getCachedHash(photo.id) ?? null);
   const [pending, setPending] = useState(false);
   const mounted = useRef(true);
 
