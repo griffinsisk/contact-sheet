@@ -81,6 +81,11 @@ export default function ContactSheet() {
   } | null>(null);
   const overrideToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Star toast — fires on every taste-library add. First fire per browser
+  // gets the longer educational copy (mirrors the override toast pattern).
+  const [starToast, setStarToast] = useState<{ isFirst: boolean } | null>(null);
+  const starToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Hydrate intent from sessionStorage after mount (avoids SSR hydration mismatch)
   useEffect(() => {
     const saved = loadSessionIntent();
@@ -88,6 +93,23 @@ export default function ContactSheet() {
       setIntentPreset(saved.preset);
       setIntentFreeForm(saved.freeForm || "");
     }
+  }, []);
+
+  // Listen for taste library additions and surface a toast so the user knows
+  // the star has the same downstream impact as a correction (feeds regen).
+  useEffect(() => {
+    const onAdded = () => {
+      const isFirst = !localStorage.getItem("cs-star-toast-seen");
+      if (isFirst) localStorage.setItem("cs-star-toast-seen", "1");
+      if (starToastTimerRef.current) clearTimeout(starToastTimerRef.current);
+      setStarToast({ isFirst });
+      starToastTimerRef.current = setTimeout(
+        () => setStarToast(null),
+        isFirst ? 7000 : 4000,
+      );
+    };
+    window.addEventListener("cs-taste-library-entry-added", onAdded);
+    return () => window.removeEventListener("cs-taste-library-entry-added", onAdded);
   }, []);
 
   const handleIntentPreset = useCallback((p: IntentPreset) => {
@@ -1055,6 +1077,43 @@ export default function ContactSheet() {
             onClick={() => {
               if (overrideToastTimerRef.current) clearTimeout(overrideToastTimerRef.current);
               setOverrideToast(null);
+            }}
+            aria-label="Dismiss"
+            className="text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0"
+          >
+            <span className="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        </div>
+      )}
+
+      {/* Star toast — fires on every taste-library add so the user sees the
+          downstream impact (parity with the override toast). Stacked above
+          the override toast so a quick correction-after-star doesn't clobber. */}
+      {starToast && (
+        <div
+          role="status"
+          className={`fixed right-6 z-50 max-w-sm bg-surface-highest border-l-2 border-primary shadow-lg px-4 py-3 flex items-start gap-3 ${overrideToast ? "bottom-32" : "bottom-6"}`}
+        >
+          <span
+            className="material-symbols-outlined text-[18px] text-primary mt-0.5"
+            style={{ fontVariationSettings: "'FILL' 1" }}
+          >
+            star
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="font-label text-[11px] uppercase tracking-widest text-on-surface mb-1">
+              Saved to library
+            </div>
+            {starToast.isFirst && (
+              <div className="font-body text-[12px] text-on-surface-variant">
+                Stars feed your taste profile — the next regen will use this frame to shape how the AI reads similar work. Manage your library from the palette icon.
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              if (starToastTimerRef.current) clearTimeout(starToastTimerRef.current);
+              setStarToast(null);
             }}
             aria-label="Dismiss"
             className="text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0"

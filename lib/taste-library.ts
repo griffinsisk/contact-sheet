@@ -62,12 +62,26 @@ export function getTasteLibraryClient(): TasteLibrary {
 }
 
 export const TASTE_LIBRARY_CHANGED_EVENT = "cs-taste-library-changed";
+export const TASTE_LIBRARY_ENTRY_ADDED_EVENT = "cs-taste-library-entry-added";
 
 export function setTasteLibraryClient(library: TasteLibrary): void {
   if (typeof window === "undefined") return;
+  const prevCount = (() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw) as TasteLibrary;
+      return Array.isArray(parsed?.entries) ? parsed.entries.length : 0;
+    } catch {
+      return 0;
+    }
+  })();
   const next = evictFifo(library);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent(TASTE_LIBRARY_CHANGED_EVENT));
+  if (next.entries.length > prevCount) {
+    window.dispatchEvent(new CustomEvent(TASTE_LIBRARY_ENTRY_ADDED_EVENT));
+  }
 }
 
 /**

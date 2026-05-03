@@ -71,7 +71,7 @@ async function downsizeFileTo512(file: File): Promise<{ bytes: Uint8Array; base6
 
 export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
   const isViewOnly = mode === "view";
-  const { addEntries, library, setProfile, setLastRegenAt } = useTasteLibrary();
+  const { addEntries, library, setProfile, setLastRegenAt, toggleFavorite } = useTasteLibrary();
   const { user } = useUser();
   const isPro = user?.publicMetadata?.tier === "pro";
   const inputRef = useRef<HTMLInputElement>(null);
@@ -490,6 +490,58 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
                     )}
                   </div>
                 )}
+
+                {/* Favorites grid — every entry that feeds the profile, with thumb + remove.
+                    Same pattern as the Corrections section so transparency parity holds. */}
+                {(() => {
+                  const usable = library.entries.filter((e) => !!e.image);
+                  if (usable.length === 0) return null;
+                  return (
+                    <div className="mt-6 pt-5 border-t border-outline-variant/30">
+                      <div className="mb-3">
+                        <div className="font-label text-[11px] text-on-surface uppercase tracking-widest font-bold">
+                          Favorites feeding this profile
+                        </div>
+                        <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
+                          {usable.length} {usable.length === 1 ? "image" : "images"} · removing one drops it from the next regen
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                        {[...usable]
+                          .sort((a, b) => b.addedAt - a.addedAt)
+                          .map((entry) => (
+                            <div
+                              key={entry.photoHash}
+                              className="relative group aspect-square bg-surface-low overflow-hidden"
+                            >
+                              <img
+                                src={`data:image/jpeg;base64,${entry.image}`}
+                                alt=""
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                              <button
+                                onClick={() => toggleFavorite(entry)}
+                                aria-label="Remove from library"
+                                title="Remove from library"
+                                className="absolute top-1 right-1 p-1 bg-background/80 text-on-surface-variant hover:text-error hover:bg-background transition-colors opacity-0 group-hover:opacity-100"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">delete</span>
+                              </button>
+                              {entry.rescued && (
+                                <span
+                                  className="absolute bottom-1 left-1 px-1 py-0.5 bg-primary/90 text-on-primary font-label text-[8px] uppercase tracking-widest"
+                                  title="Rescued from CUT"
+                                >
+                                  Rescued
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {correctionEntries.length > 0 && (
                   <div className="mt-6 pt-5 border-t border-outline-variant/30">
