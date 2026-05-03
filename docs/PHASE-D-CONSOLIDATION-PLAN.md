@@ -2,11 +2,23 @@
 
 ---
 
-## Status: draft (2026-05-02)
+## Status: implemented on `feature/consolidation` (PR #3 open as of 2026-05-03)
 
-Phase C shipped on `feature/overrides` (PRs not yet merged) introduced an override-learning system that injects past corrections as few-shot text examples into the cull system prompt. Working through the UX with Griffin surfaced a deeper architectural problem than the panel copy: we have **three parallel mechanisms** that influence cull scoring, and two of them are partially redundant.
+Phase C merged to main as PR #2 on 2026-05-02, shipping the override-learning system that injected past corrections as few-shot text examples into the cull system prompt. Working through the UX with Griffin surfaced a deeper architectural problem: three parallel mechanisms influencing cull scoring, two partially redundant.
 
-This plan retires the per-correction prompt-injection pipeline and consolidates all user-feedback signals into the existing taste-library regen loop.
+Phase D retires the per-correction prompt-injection pipeline and consolidates all user-feedback signals into the existing taste-library regen loop. PR #3 (`feature/consolidation`) implements the plan plus the transparency surfaces it generated.
+
+### What landed beyond the original plan
+
+The teardown was as scoped, but the resulting transparency gap forced parity work the original plan understated:
+
+- **Corrections feeding profile** section in View Profile (thumbnails + per-row delete + relative timestamps)
+- **"pending — regen to apply"** indicator on corrections newer than the last profile regen, and matching pill in the section header
+- **Throttle bypass** in `handleManualRegen` when pending corrections exist (12h gate still applies otherwise)
+- **"Corrected" pill** replaces the 12px gray pencil on photo cards — primary-tinted, label-bearing, glance-readable
+- **Star toast** on every taste-library add (parity with override toast); first fire per browser includes educational copy; subsequent fires short
+- **Favorites grid** in View Profile — every entry shown as a thumbnail with hover-delete; resolves the "can't remove a seed image" gap
+- `TASTE_LIBRARY_ENTRY_ADDED_EVENT` separate from `TASTE_LIBRARY_CHANGED_EVENT` so the toast only fires on adds, not removes
 
 ---
 
@@ -211,11 +223,16 @@ A meaningful chunk of the Phase C work is reusable infrastructure. Phase D is mo
 
 ---
 
-## Open questions
+## Open questions (resolved during implementation)
 
-1. Should corrections still be visible to the user as a separate list (e.g., a "history" view in the profile modal), or only show up implicitly through the regenerated prose?
-2. Tag decay: how aggressively? After 1 regen without reinforcement, or 3?
-3. Auto-regen threshold or manual only?
+1. ~~Should corrections still be visible to the user as a separate list?~~ **Yes** — the smoke test surfaced this gap immediately. The Corrections section inside View Profile is the audit surface. (Originally proposed implicit-only; reversed.)
+2. ~~Tag decay~~ — deferred. Regen rewrites tags from full corpus each time, so stale tags drop naturally; explicit decay logic isn't load-bearing yet.
+3. ~~Auto-regen threshold or manual only?~~ — manual for corrections (with pending-aware throttle bypass); auto on favorites delta unchanged. Decision: pending corrections bypass throttle, no auto-trigger on corrections specifically. Revisit if regen friction proves real.
+
+## Open questions (still outstanding)
+
+1. **Profile mechanism strength.** Test surfaced that the profile is felt mostly in cull-note language, not in scoring. The duplicate-photo edge case (a library member labeled "diverges from your library") exposes that profile influence is fuzzy prose, not deterministic math. Captured in `codex-feedback/profile-aware-scoring.md`; addressed in Phase E.
+2. **Cross-photographer learning** — out of scope, no plans to pursue.
 
 ---
 
