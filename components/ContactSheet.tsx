@@ -12,6 +12,7 @@ import { useOverrides } from "@/hooks/useOverrides";
 import { generateTasteProfile } from "@/lib/taste-library";
 import { computePhotoHash } from "@/lib/photo-hash";
 import { loadSessionIntent, saveSessionIntent } from "@/lib/session-intent";
+import { isE2EMockPro } from "@/lib/e2e";
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "@/lib/constants";
 import { resolveTier, canProcessPhotos, incrementFreeUsage, getFreeUsage } from "@/lib/tier";
 import { runHarness, computeHarnessSummary, downloadHarnessReport } from "@/lib/harness";
@@ -40,7 +41,7 @@ type Phase = "empty" | "uploading" | "ready" | "culling" | "culled" | "reviewing
 export default function ContactSheet() {
   // Clerk — publicMetadata.tier is set by Stripe webhook
   const { user } = useUser();
-  const isPro = user?.publicMetadata?.tier === "pro";
+  const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
 
   // Taste library (Pro-only profile injection — soft bias under intent)
   const { library: tasteLibrary, setProfile: setTasteProfile, setLastRegenAt: setTasteLastRegenAt } = useTasteLibrary();

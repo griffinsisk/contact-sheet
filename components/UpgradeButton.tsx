@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
+import { isE2EMockPro } from "@/lib/e2e";
 
 export default function UpgradeButton() {
   const { user } = useUser();
-  const isPro = user?.publicMetadata?.tier === "pro";
+  const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
   const [loading, setLoading] = useState(false);
 
   if (isPro) return null;

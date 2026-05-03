@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { TasteEntry, contentHash, generateTasteProfile, getTasteLibraryClient } from "@/lib/taste-library";
 import { bucketDelta } from "@/lib/overrides";
+import { isE2EMockPro } from "@/lib/e2e";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
 import { useOverrides } from "@/hooks/useOverrides";
 import type { OverrideEntry } from "@/lib/overrides";
@@ -73,7 +74,7 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
   const isViewOnly = mode === "view";
   const { addEntries, library, setProfile, setLastRegenAt, toggleFavorite } = useTasteLibrary();
   const { user } = useUser();
-  const isPro = user?.publicMetadata?.tier === "pro";
+  const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
   const inputRef = useRef<HTMLInputElement>(null);
   const [staged, setStaged] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);

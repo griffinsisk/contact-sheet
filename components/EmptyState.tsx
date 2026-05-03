@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
 import { ExperienceLevel, SessionSummary } from "@/lib/types";
+import { isE2EMockPro } from "@/lib/e2e";
 import { isRawFile } from "@/lib/raw-preview";
 import { getTasteLibraryClient, type TasteLibrary } from "@/lib/taste-library";
 import SeedUploadModal from "./SeedUploadModal";
@@ -18,7 +19,7 @@ interface Props {
 
 export default function EmptyState({ level, onLevelChange, onFiles, sessions, onRestoreSession, onOpenSettings }: Props) {
   const { user } = useUser();
-  const isPro = user?.publicMetadata?.tier === "pro";
+  const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
   const [seedModalMode, setSeedModalMode] = useState<"manage" | "view">("manage");
