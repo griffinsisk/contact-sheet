@@ -15,6 +15,10 @@ node_modules/
 # Logs
 *.log
 
+# Test artifacts
+playwright-report/
+test-results/
+
 # macOS
 .DS_Store
 

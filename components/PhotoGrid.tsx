@@ -105,7 +105,13 @@ export default function PhotoGrid({
                     {rating}
                   </span>
                   {isOverridden && (
-                    <span className="material-symbols-outlined text-[12px] text-on-surface/60" title="Manually rated">edit</span>
+                    <span
+                      className="flex items-center gap-1 bg-primary/90 text-on-primary font-label text-[9px] font-black uppercase tracking-widest px-1.5 py-1"
+                      title="You corrected this rating — feeds your taste profile on the next regen"
+                    >
+                      <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: "'FILL' 1" }}>tune</span>
+                      Corrected
+                    </span>
                   )}
                 </div>
               )}

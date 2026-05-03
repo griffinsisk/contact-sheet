@@ -1,4 +1,5 @@
 import type { Rating } from "./types";
+import type { OverrideEntry } from "./overrides";
 
 export interface TasteEntry {
   photoHash: string;
@@ -61,31 +62,59 @@ export function getTasteLibraryClient(): TasteLibrary {
 }
 
 export const TASTE_LIBRARY_CHANGED_EVENT = "cs-taste-library-changed";
+export const TASTE_LIBRARY_ENTRY_ADDED_EVENT = "cs-taste-library-entry-added";
 
 export function setTasteLibraryClient(library: TasteLibrary): void {
   if (typeof window === "undefined") return;
+  const prevCount = (() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw) as TasteLibrary;
+      return Array.isArray(parsed?.entries) ? parsed.entries.length : 0;
+    } catch {
+      return 0;
+    }
+  })();
   const next = evictFifo(library);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent(TASTE_LIBRARY_CHANGED_EVENT));
+  if (next.entries.length > prevCount) {
+    window.dispatchEvent(new CustomEvent(TASTE_LIBRARY_ENTRY_ADDED_EVENT));
+  }
 }
 
 /**
  * Generate a taste profile from the entries in the library that carry an image.
  * Hash-only entries are ignored — they have no signal for the model.
+ *
+ * Optionally accepts past corrections (rating overrides) to express direction
+ * signals in the regen prompt: rescues = positive, downgrades = negative.
  */
 export async function generateTasteProfile(
   library: TasteLibrary,
+  corrections?: OverrideEntry[],
 ): Promise<{
   profile: TasteProfile | null;
   coherence: "high" | "medium" | "low";
   usedEntryCount: number;
+  usedCorrectionCount: number;
 }> {
   const usable = library.entries.filter((e) => !!e.image);
   if (usable.length < 4) {
     throw new Error(`Need at least 4 favorites with image data; have ${usable.length}.`);
   }
+  // Only ship corrections that have a description (others were just hashed and
+  // their describe call hadn't returned yet).
+  const usableCorrections = (corrections ?? []).filter((c) => c.shortDescription.trim().length > 0);
   const payload = {
     entries: usable.map((e) => ({ photoHash: e.photoHash, image: e.image! })),
+    corrections: usableCorrections.map((c) => ({
+      shortDescription: c.shortDescription,
+      originalRating: c.originalRating,
+      userRating: c.userRating,
+      sessionIntent: c.sessionIntent,
+    })),
   };
   const res = await fetch("/api/taste-profile", {
     method: "POST",
@@ -103,7 +132,12 @@ export async function generateTasteProfile(
     generatedAt: number;
   };
   if (json.coherence === "low" || json.aestheticTags.length === 0) {
-    return { profile: null, coherence: json.coherence, usedEntryCount: usable.length };
+    return {
+      profile: null,
+      coherence: json.coherence,
+      usedEntryCount: usable.length,
+      usedCorrectionCount: usableCorrections.length,
+    };
   }
   return {
     profile: {
@@ -114,6 +148,7 @@ export async function generateTasteProfile(
     },
     coherence: json.coherence,
     usedEntryCount: usable.length,
+    usedCorrectionCount: usableCorrections.length,
   };
 }
 

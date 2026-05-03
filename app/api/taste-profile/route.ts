@@ -23,11 +23,19 @@ Cross-genre breadth is normal and expected — favorites often span landscapes, 
 
 NON-PHOTOGRAPHIC CONTENT: If a substantial portion of the set is non-photographic (screenshots, memes, illustrations, AI-generated imagery, scanned documents, UI captures), call that out explicitly. Do NOT mine a small photographic minority for a confident taste read — describe surface-level patterns only.
 
+PAST CORRECTIONS (optional, may be present after the photo set):
+The photographer may have corrected an AI's earlier ratings on past frames. Each correction has a short description, the AI's original rating, and the photographer's revised rating. Use them as DIRECTION signals on top of the visual taste from favorites:
+- A correction UP (e.g. CUT → MAYBE, CUT → HERO) means the photographer rescues frames the AI underrated — incorporate the described trait as something they value.
+- A correction DOWN (e.g. HERO → CUT, SELECT → MAYBE) means the AI overrated — describe the deprioritized trait so future culls don't repeat the mistake.
+- Larger rating gaps carry more weight than one-bucket nudges.
+- Corrections are textual evidence; favorites are visual evidence. Prioritize favorites for the core taste read; let corrections refine direction and surface things the favorites alone don't show (especially counter-preferences).
+- If correction count is low (<3) or descriptions are noisy, mention them only when they reinforce a clear pattern; don't manufacture a counter-preference from a single downgrade.
+
 DO NOT describe genre ("they shoot landscapes and portraits") — that's obvious and doesn't describe taste.
 DO NOT generalize into vague marketing language ("moody, cinematic, atmospheric"). Be specific and grounded in what you see.
 DO NOT exceed the evidence. Reserve disclaimer for sets where taste traits genuinely don't survive, OR where non-photographic content dominates.
 
-Write 100–150 words in second person ("You consistently frame…", "Your work favors…"). Lead with the strongest pattern. Only if taste traits don't survive (or non-photo content dominates), open with "This set doesn't show consistent taste signal yet — " and describe partial patterns.
+Write 100–150 words in second person ("You consistently frame…", "Your work favors…"). Lead with the strongest pattern. When corrections meaningfully shape the read, include a sentence like "You've also corrected the AI to deprioritize…" or "Your corrections show you rescue…". Only if taste traits don't survive (or non-photo content dominates), open with "This set doesn't show consistent taste signal yet — " and describe partial patterns.
 
 After your prose, on a final separate line, output exactly one of these markers:
 [COHERENCE: high]    — strong consistent taste signal across the set; ship a confident profile
@@ -57,6 +65,18 @@ interface RawEntry {
   image: string;
 }
 
+const VALID_RATINGS = ["HERO", "SELECT", "MAYBE", "CUT"] as const;
+type RatingLit = typeof VALID_RATINGS[number];
+
+interface RawCorrection {
+  shortDescription: string;
+  originalRating: RatingLit;
+  userRating: RatingLit;
+  sessionIntent: string;
+}
+
+const MAX_CORRECTIONS = 30;
+
 function coerceEntries(raw: unknown): RawEntry[] | null {
   if (!Array.isArray(raw)) return null;
   const out: RawEntry[] = [];
@@ -68,6 +88,44 @@ function coerceEntries(raw: unknown): RawEntry[] | null {
     out.push({ photoHash: r.photoHash, image: r.image });
   }
   return out;
+}
+
+function coerceCorrections(raw: unknown): RawCorrection[] | null | "invalid" {
+  if (raw === undefined || raw === null) return null;
+  if (!Array.isArray(raw)) return "invalid";
+  const out: RawCorrection[] = [];
+  for (const item of raw.slice(0, MAX_CORRECTIONS)) {
+    if (!item || typeof item !== "object") return "invalid";
+    const r = item as Record<string, unknown>;
+    if (typeof r.shortDescription !== "string" || !r.shortDescription.trim()) continue;
+    if (typeof r.originalRating !== "string" || !VALID_RATINGS.includes(r.originalRating as RatingLit)) return "invalid";
+    if (typeof r.userRating !== "string" || !VALID_RATINGS.includes(r.userRating as RatingLit)) return "invalid";
+    if (typeof r.sessionIntent !== "string") return "invalid";
+    out.push({
+      shortDescription: r.shortDescription.slice(0, 300),
+      originalRating: r.originalRating as RatingLit,
+      userRating: r.userRating as RatingLit,
+      sessionIntent: r.sessionIntent.slice(0, 40),
+    });
+  }
+  return out;
+}
+
+const RATING_ORDER: RatingLit[] = ["CUT", "MAYBE", "SELECT", "HERO"];
+function correctionDirection(c: RawCorrection): { dir: "UP" | "DOWN" | "FLAT"; magnitude: number } {
+  const d = RATING_ORDER.indexOf(c.userRating) - RATING_ORDER.indexOf(c.originalRating);
+  if (d > 0) return { dir: "UP", magnitude: d };
+  if (d < 0) return { dir: "DOWN", magnitude: -d };
+  return { dir: "FLAT", magnitude: 0 };
+}
+
+function formatCorrectionsBlock(corrections: RawCorrection[]): string {
+  if (corrections.length === 0) return "";
+  const lines = corrections.map((c) => {
+    const { dir, magnitude } = correctionDirection(c);
+    return `- "${c.shortDescription}" — ${c.originalRating} → ${c.userRating} (${dir} ${magnitude}, ${c.sessionIntent})`;
+  });
+  return `\n\nPAST CORRECTIONS BY THIS PHOTOGRAPHER (${corrections.length}):\n${lines.join("\n")}`;
 }
 
 function decodeBase64Image(image: string): { buffer: Buffer; mediaType: string } | null {
@@ -135,6 +193,14 @@ export async function POST(req: NextRequest) {
   }
   const capped = entries.slice(0, MAX_ENTRIES);
 
+  const corrections = coerceCorrections(body?.corrections);
+  if (corrections === "invalid") {
+    return NextResponse.json(
+      { error: "corrections must be an array of { shortDescription, originalRating, userRating, sessionIntent }" },
+      { status: 400 },
+    );
+  }
+
   let images: { base64: string; mediaType: string }[];
   try {
     const resized = await Promise.all(capped.map(e => resizeTo512(e.image)));
@@ -150,6 +216,8 @@ export async function POST(req: NextRequest) {
   }
 
   const textParts = capped.map((_, i) => `[Photo ${i + 1}]`);
+  const correctionsBlock = corrections ? formatCorrectionsBlock(corrections) : "";
+  if (correctionsBlock) textParts.push(correctionsBlock);
 
   try {
     const stage1 = await callProvider("anthropic", apiKey, model, {

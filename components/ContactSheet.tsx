@@ -9,10 +9,10 @@ import {
 import { runCull, runDeepReview, runCompare } from "@/lib/api";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
 import { useOverrides } from "@/hooks/useOverrides";
-import { selectFewShot } from "@/lib/overrides";
 import { generateTasteProfile } from "@/lib/taste-library";
 import { computePhotoHash } from "@/lib/photo-hash";
 import { loadSessionIntent, saveSessionIntent } from "@/lib/session-intent";
+import { isE2EMockPro } from "@/lib/e2e";
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "@/lib/constants";
 import { resolveTier, canProcessPhotos, incrementFreeUsage, getFreeUsage } from "@/lib/tier";
 import { runHarness, computeHarnessSummary, downloadHarnessReport } from "@/lib/harness";
@@ -41,7 +41,7 @@ type Phase = "empty" | "uploading" | "ready" | "culling" | "culled" | "reviewing
 export default function ContactSheet() {
   // Clerk — publicMetadata.tier is set by Stripe webhook
   const { user } = useUser();
-  const isPro = user?.publicMetadata?.tier === "pro";
+  const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
 
   // Taste library (Pro-only profile injection — soft bias under intent)
   const { library: tasteLibrary, setProfile: setTasteProfile, setLastRegenAt: setTasteLastRegenAt } = useTasteLibrary();
@@ -82,6 +82,11 @@ export default function ContactSheet() {
   } | null>(null);
   const overrideToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Star toast — fires on every taste-library add. First fire per browser
+  // gets the longer educational copy (mirrors the override toast pattern).
+  const [starToast, setStarToast] = useState<{ isFirst: boolean } | null>(null);
+  const starToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Hydrate intent from sessionStorage after mount (avoids SSR hydration mismatch)
   useEffect(() => {
     const saved = loadSessionIntent();
@@ -89,6 +94,23 @@ export default function ContactSheet() {
       setIntentPreset(saved.preset);
       setIntentFreeForm(saved.freeForm || "");
     }
+  }, []);
+
+  // Listen for taste library additions and surface a toast so the user knows
+  // the star has the same downstream impact as a correction (feeds regen).
+  useEffect(() => {
+    const onAdded = () => {
+      const isFirst = !localStorage.getItem("cs-star-toast-seen");
+      if (isFirst) localStorage.setItem("cs-star-toast-seen", "1");
+      if (starToastTimerRef.current) clearTimeout(starToastTimerRef.current);
+      setStarToast({ isFirst });
+      starToastTimerRef.current = setTimeout(
+        () => setStarToast(null),
+        isFirst ? 7000 : 4000,
+      );
+    };
+    window.addEventListener("cs-taste-library-entry-added", onAdded);
+    return () => window.removeEventListener("cs-taste-library-entry-added", onAdded);
   }, []);
 
   const handleIntentPreset = useCallback((p: IntentPreset) => {
@@ -215,7 +237,7 @@ export default function ContactSheet() {
 
     // Fire-and-forget; surface state via regenStatus so user can wait if needed.
     setRegenStatus("generating");
-    generateTasteProfile(tasteLibrary)
+    generateTasteProfile(tasteLibrary, overridesStore.entries)
       .then(({ profile }) => {
         if (profile) setTasteProfile(profile);
         setTasteLastRegenAt(Date.now());
@@ -226,7 +248,7 @@ export default function ContactSheet() {
       .finally(() => {
         setRegenStatus("idle");
       });
-  }, [isPro, tasteLibrary, setTasteProfile, setTasteLastRegenAt]);
+  }, [isPro, tasteLibrary, overridesStore.entries, setTasteProfile, setTasteLastRegenAt]);
 
   // ── Cull ────────────────────────────────────────────────────────────────
 
@@ -261,19 +283,11 @@ export default function ContactSheet() {
       const profile = !ignoreTasteProfile && tasteLibrary.currentProfile
         ? { prose: tasteLibrary.currentProfile.prose, aestheticTags: tasteLibrary.currentProfile.aestheticTags }
         : null;
-      const overrideHints = isPro
-        ? selectFewShot(overridesStore, effectiveIntent.preset, 8).map(o => ({
-            shortDescription: o.shortDescription,
-            originalRating: o.originalRating,
-            originalScore: o.originalScore,
-            userRating: o.userRating,
-          }))
-        : [];
       const results = await runCull(target, config, effectiveIntent, (msg, batch, total) => {
         setProgressMsg(msg);
         setProgressPct(Math.round(((batch + 1) / total) * 100));
         setProgressDone(Math.min(batch * CULL_BATCH_SIZE, target.length));
-      }, profile, overrideHints.length > 0 ? overrideHints : null);
+      }, profile);
       setProgressDone(target.length);
       setCullResults(results);
       if (tier === "free") incrementFreeUsage(target.length);
@@ -297,7 +311,7 @@ export default function ContactSheet() {
       setPhase(Object.keys(cullResults).length > 0 ? "culled" : "empty");
       setProgressMsg("");
     }
-  }, [config, photos, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, ignoreTasteProfile, maybeAutoRegenProfile, overridesStore]);
+  }, [config, photos, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, ignoreTasteProfile, maybeAutoRegenProfile]);
 
   // ── Deep review ─────────────────────────────────────────────────────────
 
@@ -478,24 +492,34 @@ export default function ContactSheet() {
 
   const handleRatingOverride = useCallback((index: number, rating: Rating) => {
     const prevRating = ratingOverrides[index];
-    setRatingOverrides(prev => ({ ...prev, [index]: rating }));
-
-    // Capture as Phase C override entry when there's an AI rating to disagree with
-    // and the user actually changed it. shortDescription is filled in by Step 2;
-    // empty for now is fine — selectFewShot still ranks by recency + intent.
     const cull = cullResults[index];
     const photo = photos[index];
-    if (!cull || !photo || !intentPreset) return;
-    if (!photo.base64) return; // restored sessions: no pixels to hash
 
     // User reverted to the AI's original rating — clean up any saved
-    // override for this frame so it stops weighting future culls.
-    if (cull.rating === rating) {
-      computePhotoHash(photo)
-        .then(({ hash }) => removeOverride(hash))
-        .catch(() => { /* hash failure is harmless here */ });
+    // override for this frame so it stops weighting future culls and stops
+    // rendering as a correction locally.
+    if (cull?.rating === rating) {
+      setRatingOverrides(prev => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+      if (photo?.base64) {
+        computePhotoHash(photo)
+          .then(({ hash }) => removeOverride(hash))
+          .catch(() => { /* hash failure is harmless here */ });
+      }
       return;
     }
+
+    setRatingOverrides(prev => ({ ...prev, [index]: rating }));
+
+    // Capture the correction as a signal feeding the taste-profile regen
+    // (Phase D). shortDescription is filled in by the describe call below; an
+    // empty description is dropped at regen time, so the entry is harmless
+    // until the description lands.
+    if (!cull || !photo || !intentPreset) return;
+    if (!photo.base64) return; // restored sessions: no pixels to hash
 
     computePhotoHash(photo).then(async ({ hash, image }) => {
       const baseEntry = {
@@ -535,7 +559,8 @@ export default function ContactSheet() {
           addOverride({ ...baseEntry, shortDescription: json.description });
         }
       } catch {
-        // describe is best-effort; selectFewShot still ranks empty-desc entries
+        // describe is best-effort; entries without a description are filtered
+        // out at regen time, so the correction is silent until the call returns
       }
     }).catch(() => { /* hash failure shouldn't block UI override */ });
   }, [cullResults, photos, intentPreset, addOverride, removeOverride, ratingOverrides]);
@@ -800,20 +825,6 @@ export default function ContactSheet() {
               </div>
             )}
 
-            {isPro && intentPreset && (() => {
-              const count = selectFewShot(overridesStore, intentPreset, 8)
-                .filter(o => o.shortDescription.trim().length > 0).length;
-              if (count === 0) return null;
-              return (
-                <div className="mt-3 flex items-center justify-end gap-2 text-on-surface-variant">
-                  <span className="material-symbols-outlined text-[14px]">tune</span>
-                  <span className="font-label text-[11px] uppercase tracking-widest">
-                    {count} past {count === 1 ? "correction" : "corrections"} will inform this cull
-                  </span>
-                </div>
-              );
-            })()}
-
             <div className="pt-4 border-t border-outline-variant">
               <IntentPicker
                 preset={intentPreset}
@@ -1051,7 +1062,7 @@ export default function ContactSheet() {
             </div>
             {overrideToast.isFirst && (
               <div className="font-body text-[12px] text-on-surface-variant mb-2">
-                Future culls in similar shoots will weight toward your rating. Manage saved corrections from the header.
+                Saved as a signal — your taste profile will incorporate it on the next regen, shaping how the AI reads similar frames.
               </div>
             )}
             <button
@@ -1076,6 +1087,43 @@ export default function ContactSheet() {
             onClick={() => {
               if (overrideToastTimerRef.current) clearTimeout(overrideToastTimerRef.current);
               setOverrideToast(null);
+            }}
+            aria-label="Dismiss"
+            className="text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0"
+          >
+            <span className="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        </div>
+      )}
+
+      {/* Star toast — fires on every taste-library add so the user sees the
+          downstream impact (parity with the override toast). Stacked above
+          the override toast so a quick correction-after-star doesn't clobber. */}
+      {starToast && (
+        <div
+          role="status"
+          className={`fixed right-6 z-50 max-w-sm bg-surface-highest border-l-2 border-primary shadow-lg px-4 py-3 flex items-start gap-3 ${overrideToast ? "bottom-32" : "bottom-6"}`}
+        >
+          <span
+            className="material-symbols-outlined text-[18px] text-primary mt-0.5"
+            style={{ fontVariationSettings: "'FILL' 1" }}
+          >
+            star
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="font-label text-[11px] uppercase tracking-widest text-on-surface mb-1">
+              Saved to library
+            </div>
+            {starToast.isFirst && (
+              <div className="font-body text-[12px] text-on-surface-variant">
+                Stars feed your taste profile — the next regen will use this frame to shape how the AI reads similar work. Manage your library from the palette icon.
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              if (starToastTimerRef.current) clearTimeout(starToastTimerRef.current);
+              setStarToast(null);
             }}
             aria-label="Dismiss"
             className="text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0"
