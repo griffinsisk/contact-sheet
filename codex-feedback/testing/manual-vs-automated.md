@@ -22,9 +22,13 @@ Good for:
 - Intent selection
 - Cull result rendering
 - Rating overrides
+- Rating override cleanup when the user reverts to the AI rating
+- Correction toast education, subsequent-fire behavior, and Undo
 - Star/favorite persistence
 - Toasts and badges
 - LocalStorage updates
+- Profile modal signal surfaces
+- Manual regen request-body plumbing
 - Regression checks after UI/data-flow changes
 
 Not good for:

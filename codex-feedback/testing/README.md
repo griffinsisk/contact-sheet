@@ -21,7 +21,7 @@ This folder explains the testing strategy for Contact Sheet so another AI agent 
 - `tests/unit/exports.test.ts` — export/XMP/manifest behavior
 - `tests/unit/providers.test.ts` — JSON parse and truncation repair
 - `tests/unit/tier.test.ts` — tier resolution and free quota gates
-- `tests/e2e/contact-sheet-smoke.spec.ts` — mocked UI flow for upload → cull → correction → star persistence
+- `tests/e2e/contact-sheet-smoke.spec.ts` — mocked UI flow for upload → cull → correction → revert/Undo → star persistence → profile regen plumbing
 
 ## What The Existing Tests Prove
 
@@ -31,8 +31,15 @@ The current automated tests prove the local app plumbing works around mocked AI 
 - Shoot intent can be selected.
 - A cull result can be rendered.
 - A rating correction can be applied.
+- The first correction toast shows educational copy.
+- Subsequent correction toasts stay short.
+- Undo removes the latest correction signal.
+- Reverting back to the AI rating removes the override signal.
 - Correction state persists to `cs-overrides`.
 - Star/favorite state persists to `cs-taste-library`.
+- The View Profile modal renders favorites and pending corrections.
+- Manual regen includes `corrections[]` in the `/api/taste-profile` request.
+- Pending correction state clears after regen succeeds.
 - Export helpers respect human overrides.
 - JSON repair handles common truncated AI responses.
 - Free/pro/BYOK tier gates behave locally.

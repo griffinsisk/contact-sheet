@@ -10,6 +10,34 @@ const BLUE_DOT_PNG = Buffer.from(
   "base64",
 );
 
+async function uploadAndCullTwoPhotos(page: import("@playwright/test").Page) {
+  await page.goto("/");
+
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Pick Files" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles([
+    { name: "red-dot.png", mimeType: "image/png", buffer: RED_DOT_PNG },
+    { name: "blue-dot.png", mimeType: "image/png", buffer: BLUE_DOT_PNG },
+  ]);
+
+  await expect(page.getByText("2 photos loaded")).toBeVisible();
+  await page.getByRole("button", { name: /Mixed/ }).click();
+  await page.getByRole("button", { name: /START CULL/i }).click();
+
+  await expect(page.getByRole("button", { name: /red-dot\.png, SELECT, score 72/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /blue-dot\.png, CUT, score 48/ })).toBeVisible();
+}
+
+async function overrideEntryCount(page: import("@playwright/test").Page): Promise<number> {
+  return page.evaluate(() => {
+    const raw = window.localStorage.getItem("cs-overrides");
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    return parsed.entries?.length ?? 0;
+  });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/cull", async (route) => {
     await route.fulfill({
@@ -49,22 +77,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("cull, correction, and star signals are persisted with mocked APIs", async ({ page }) => {
-  await page.goto("/");
-
-  const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Pick Files" }).click();
-  const chooser = await chooserPromise;
-  await chooser.setFiles([
-    { name: "red-dot.png", mimeType: "image/png", buffer: RED_DOT_PNG },
-    { name: "blue-dot.png", mimeType: "image/png", buffer: BLUE_DOT_PNG },
-  ]);
-
-  await expect(page.getByText("2 photos loaded")).toBeVisible();
-  await page.getByRole("button", { name: /Mixed/ }).click();
-  await page.getByRole("button", { name: /START CULL/i }).click();
-
-  await expect(page.getByRole("button", { name: /red-dot\.png, SELECT, score 72/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /blue-dot\.png, CUT, score 48/ })).toBeVisible();
+  await uploadAndCullTwoPhotos(page);
 
   await page.getByRole("button", { name: /red-dot\.png, SELECT, score 72/ }).click();
   await page.getByRole("button", { name: "Rate as MAYBE" }).click();
@@ -92,6 +105,60 @@ test("cull, correction, and star signals are persisted with mocked APIs", async 
       return parsed.entries?.length ?? 0;
     });
   }).toBe(1);
+});
+
+test("reverting a correction back to the AI rating removes the override signal", async ({ page }) => {
+  await uploadAndCullTwoPhotos(page);
+
+  await page.getByRole("button", { name: /blue-dot\.png, CUT, score 48/ }).click();
+  await page.getByRole("button", { name: "Rate as MAYBE" }).click();
+
+  await expect(page.getByText("Correction saved")).toBeVisible();
+  await expect(page.getByText("Corrected")).toBeVisible();
+  await expect.poll(() => overrideEntryCount(page)).toBe(1);
+
+  await page.getByRole("button", { name: "Rate as CUT" }).click();
+
+  await expect.poll(() => overrideEntryCount(page)).toBe(0);
+  await expect(page.getByText("Corrected")).toHaveCount(0);
+  await expect(page.getByText("AI RATING")).toBeVisible();
+});
+
+test("correction toast distinguishes first fire, subsequent fire, and undo", async ({ page }) => {
+  await uploadAndCullTwoPhotos(page);
+
+  await page.evaluate(() => window.localStorage.removeItem("cs-overrides-toast-seen"));
+
+  await page.getByRole("button", { name: /red-dot\.png, SELECT, score 72/ }).click();
+  await page.getByRole("button", { name: "Rate as MAYBE" }).click();
+
+  await expect(page.getByText("Correction saved")).toBeVisible();
+  await expect(page.getByText(/Saved as a signal/)).toBeVisible();
+  await expect.poll(() => overrideEntryCount(page)).toBe(1);
+
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("Correction saved")).toHaveCount(0);
+
+  await page.getByRole("button", { name: /blue-dot\.png, CUT, score 48/ }).click();
+  await page.getByRole("button", { name: "Rate as MAYBE" }).click();
+
+  await expect(page.getByText("Correction saved")).toBeVisible();
+  await expect(page.getByText(/Saved as a signal/)).toHaveCount(0);
+  await expect.poll(() => overrideEntryCount(page)).toBe(2);
+
+  await page.getByRole("button", { name: "Undo" }).click();
+
+  await expect.poll(() => overrideEntryCount(page)).toBe(1);
+  await expect(page.getByText("AI RATING")).toBeVisible();
+  await expect(page.getByText("Correction saved")).toHaveCount(0);
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const raw = window.localStorage.getItem("cs-overrides");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed.entries?.[0]?.originalRating ?? null;
+    });
+  }).toBe("SELECT");
 });
 
 test("profile modal shows Phase D signals and sends corrections on manual regen", async ({ page }) => {

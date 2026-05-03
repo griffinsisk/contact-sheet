@@ -31,9 +31,17 @@ The current smoke test mocks Claude-facing API routes and verifies:
 - Selecting shoot intent
 - Running a mocked cull
 - Applying a rating correction
+- Showing first-fire correction education copy
+- Showing shorter subsequent correction toasts
+- Undoing a correction from the toast
+- Reverting a manual rating back to the AI rating and removing the override signal
 - Persisting the correction signal to `cs-overrides`
 - Starring a frame
 - Persisting the favorite to `cs-taste-library`
+- Rendering the taste-profile modal's favorites grid
+- Rendering pending corrections feeding the profile
+- Sending `corrections[]` to `/api/taste-profile` during manual regen
+- Clearing pending correction state after mocked regen succeeds
 
 ## Full Local Verification
 

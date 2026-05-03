@@ -492,25 +492,34 @@ export default function ContactSheet() {
 
   const handleRatingOverride = useCallback((index: number, rating: Rating) => {
     const prevRating = ratingOverrides[index];
+    const cull = cullResults[index];
+    const photo = photos[index];
+
+    // User reverted to the AI's original rating — clean up any saved
+    // override for this frame so it stops weighting future culls and stops
+    // rendering as a correction locally.
+    if (cull?.rating === rating) {
+      setRatingOverrides(prev => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+      if (photo?.base64) {
+        computePhotoHash(photo)
+          .then(({ hash }) => removeOverride(hash))
+          .catch(() => { /* hash failure is harmless here */ });
+      }
+      return;
+    }
+
     setRatingOverrides(prev => ({ ...prev, [index]: rating }));
 
     // Capture the correction as a signal feeding the taste-profile regen
     // (Phase D). shortDescription is filled in by the describe call below; an
     // empty description is dropped at regen time, so the entry is harmless
     // until the description lands.
-    const cull = cullResults[index];
-    const photo = photos[index];
     if (!cull || !photo || !intentPreset) return;
     if (!photo.base64) return; // restored sessions: no pixels to hash
-
-    // User reverted to the AI's original rating — clean up any saved
-    // override for this frame so it stops weighting future culls.
-    if (cull.rating === rating) {
-      computePhotoHash(photo)
-        .then(({ hash }) => removeOverride(hash))
-        .catch(() => { /* hash failure is harmless here */ });
-      return;
-    }
 
     computePhotoHash(photo).then(async ({ hash, image }) => {
       const baseEntry = {
