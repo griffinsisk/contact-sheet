@@ -2,7 +2,7 @@
 
 ---
 
-## Status: implemented on `feature/consolidation` (PR #3 open as of 2026-05-03)
+## Status: merged to main 2026-05-03 (PR #3)
 
 Phase C merged to main as PR #2 on 2026-05-02, shipping the override-learning system that injected past corrections as few-shot text examples into the cull system prompt. Working through the UX with Griffin surfaced a deeper architectural problem: three parallel mechanisms influencing cull scoring, two partially redundant.
 
