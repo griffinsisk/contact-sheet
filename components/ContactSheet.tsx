@@ -498,6 +498,17 @@ export default function ContactSheet() {
     const prevRating = ratingOverrides[index];
     const cull = cullResults[index];
     const photo = photos[index];
+    const syncShortlistSelection = (effectiveRating: Rating) => {
+      setDeepSelected(prev => {
+        const next = new Set(prev);
+        if (effectiveRating === "HERO" || effectiveRating === "SELECT") {
+          next.add(index);
+        } else {
+          next.delete(index);
+        }
+        return next;
+      });
+    };
 
     // User reverted to the AI's original rating — clean up any saved
     // override for this frame so it stops weighting future culls and stops
@@ -513,10 +524,12 @@ export default function ContactSheet() {
           .then(({ hash }) => removeOverride(hash))
           .catch(() => { /* hash failure is harmless here */ });
       }
+      syncShortlistSelection(cull.rating);
       return;
     }
 
     setRatingOverrides(prev => ({ ...prev, [index]: rating }));
+    syncShortlistSelection(rating);
 
     // Capture the correction as a signal feeding the taste-profile regen
     // (Phase D). shortDescription is filled in by the describe call below; an

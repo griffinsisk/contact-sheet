@@ -34,7 +34,10 @@ async function makeTasteSeedFiles() {
   })));
 }
 
-async function uploadAndCullTwoPhotos(page: import("@playwright/test").Page) {
+async function uploadAndCullTwoPhotos(
+  page: import("@playwright/test").Page,
+  expectedSecond: RegExp = /blue-dot\.png, CUT, score 46/,
+) {
   await page.goto("/");
 
   const chooserPromise = page.waitForEvent("filechooser");
@@ -50,7 +53,7 @@ async function uploadAndCullTwoPhotos(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: /START CULL/i }).click();
 
   await expect(page.getByRole("button", { name: /red-dot\.png, SELECT, score 72/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /blue-dot\.png, CUT, score 46/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: expectedSecond })).toBeVisible();
 }
 
 async function overrideEntryCount(page: import("@playwright/test").Page): Promise<number> {
@@ -221,6 +224,93 @@ test("develop shortlist shows editor notes and secondary score", async ({ page }
   await expect(panel.getByText("TECHNICAL QUALITY")).toBeVisible();
   await expect(panel.getByText("EDITOR'S SCORE")).toBeVisible();
   await expect(panel.getByText("76", { exact: true })).toBeVisible();
+});
+
+test("develop shortlist includes photos promoted into select tier", async ({ page }) => {
+  let deepReviewPayload: any = null;
+
+  await page.unroute("**/api/cull");
+  await page.route("**/api/cull", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        text: JSON.stringify({
+          cull: [
+            {
+              index: 0,
+              score: 72,
+              rating: "SELECT",
+              scores: { impact: 74, composition: 72, rawQuality: 80, craftExecution: 70, story: 62 },
+              reason: "Clean color field with enough graphic impact for a first-pass select.",
+            },
+            {
+              index: 1,
+              score: 58,
+              rating: "MAYBE",
+              scores: { impact: 54, composition: 58, rawQuality: 75, craftExecution: 60, story: 42 },
+              reason: "Marginal frame with enough raw material to reconsider.",
+            },
+          ],
+        }),
+        truncated: false,
+      }),
+    });
+  });
+
+  await page.unroute("**/api/deep-review");
+  await page.route("**/api/deep-review", async (route) => {
+    deepReviewPayload = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        text: JSON.stringify({
+          analysis: [
+            {
+              index: 0,
+              rating: "SELECT",
+              score: 76,
+              scores: { impact: 76, composition: 74, rawQuality: 82, craftExecution: 72, story: 70 },
+              title: "Red Study",
+              editorialRole: "anchor",
+              editDirection: "Hold the simple graphic read.",
+              cropOrCompositionNote: "Keep the centered geometry.",
+              technical: "Clean file.",
+              style_story: "Quiet graphic anchor.",
+              verdict: "Use it.",
+            },
+            {
+              index: 1,
+              rating: "SELECT",
+              score: 70,
+              scores: { impact: 68, composition: 70, rawQuality: 76, craftExecution: 66, story: 62 },
+              title: "Blue Study",
+              editorialRole: "supporting",
+              editDirection: "Use as a quieter supporting frame.",
+              cropOrCompositionNote: "Keep it loose.",
+              technical: "Usable file.",
+              style_story: "Supports the sequence.",
+              verdict: "Include if the set needs pacing.",
+            },
+          ],
+          curatorial_notes: "Two-frame shortlist.",
+          recommended_sequence: [0, 1],
+        }),
+        truncated: false,
+      }),
+    });
+  });
+
+  await uploadAndCullTwoPhotos(page, /blue-dot\.png, MAYBE, score 56/);
+
+  await page.getByRole("button", { name: /blue-dot\.png, MAYBE, score 56/ }).click();
+  await page.getByRole("button", { name: "Rate as SELECT" }).click();
+
+  await expect(page.getByRole("button", { name: /Develop shortlist for 2 photos/i })).toBeVisible();
+  await page.getByRole("button", { name: /Develop shortlist for 2 photos/i }).click();
+
+  await expect.poll(() => deepReviewPayload).not.toBeNull();
+  expect(deepReviewPayload.textParts).toHaveLength(2);
+  expect(deepReviewPayload.textParts[1]).toContain("blue-dot.png");
 });
 
 test("reverting a correction back to the AI rating removes the override signal", async ({ page }) => {
