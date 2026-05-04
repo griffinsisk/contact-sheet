@@ -284,9 +284,9 @@ test("profile modal shows Phase D signals and sends corrections on manual regen"
   await page.addInitScript(({ now, image }) => {
     window.localStorage.setItem("cs-taste-library", JSON.stringify({
       version: 1,
-      entries: [0, 1, 2, 3].map((i) => ({
+      entries: [0, 1, 2, 3, 4].map((i) => ({
         photoHash: `favorite-${i}`,
-        addedAt: now - (10_000 + i),
+        addedAt: i === 4 ? now : now - (10_000 + i),
         originalRating: "SELECT",
         image,
       })),
@@ -331,16 +331,18 @@ test("profile modal shows Phase D signals and sends corrections on manual regen"
 
   await page.getByRole("button", { name: "View Profile" }).click();
   await expect(page.getByText("Favorites feeding this profile")).toBeVisible();
-  await expect(page.getByLabel("Remove from library")).toHaveCount(4);
+  await expect(page.getByLabel("Remove from library")).toHaveCount(5);
+  await expect(page.getByText(/1 favorite pending — regen to apply/)).toBeVisible();
+  await expect(page.getByLabel("Pending profile regen")).toHaveCount(1);
   await expect(page.getByText("Corrections feeding this profile")).toBeVisible();
   await expect(page.getByText(/1 pending — regen to apply/)).toBeVisible();
   await expect(page.getByText("Minimal red color field, centered composition, no visible subject or story")).toBeVisible();
 
   await page.getByRole("button", { name: /REGENERATE PROFILE/i }).click();
 
-  await expect(page.getByText("Profile generated from 4 favorites.")).toBeVisible();
+  await expect(page.getByText("Profile generated from 5 favorites.")).toBeVisible();
   await expect.poll(() => tasteProfilePayload).not.toBeNull();
-  expect(tasteProfilePayload.entries).toHaveLength(4);
+  expect(tasteProfilePayload.entries).toHaveLength(5);
   expect(tasteProfilePayload.corrections).toEqual([
     {
       shortDescription: "Minimal red color field, centered composition, no visible subject or story",
