@@ -190,7 +190,7 @@ export async function runDeepReview(
 
   for (let bi = 0; bi < batches.length; bi++) {
     const batch = batches[bi];
-    onProgress?.(`Deep review ${bi + 1} of ${batches.length}…`, bi, batches.length);
+    onProgress?.(`Developing shortlist ${bi + 1} of ${batches.length}…`, bi, batches.length);
 
     const images = batch.map(b => ({
       base64: b.photo.base64!,

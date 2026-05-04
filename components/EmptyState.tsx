@@ -181,7 +181,7 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
               <span className="mono-label text-[10px] text-outline tracking-[0.2em]">PRO · $5/MO</span>
               <h3 className="mt-2 serif-italic text-2xl text-on-surface">Unlimited culls</h3>
               <p className="mt-3 text-sm text-on-surface-variant">
-                Full shoots, deep reviews, comparisons. Cancel anytime.
+                Full shoots, editor's notes, comparisons. Cancel anytime.
               </p>
             </div>
             {isPro ? (

@@ -28,6 +28,9 @@ const deep: DeepResult = {
   score: 88,
   scores: { impact: 90, composition: 88, rawQuality: 84, craftExecution: 86, story: 90 },
   title: "Warm <Light> & Waiting",
+  editorialRole: "anchor",
+  editDirection: "Hold the simple graphic read; deepen contrast while keeping the red field clean.",
+  cropOrCompositionNote: "Keep the centered geometry; avoid cropping tighter.",
   technical: "Good dynamic range.",
   style_story: "Human moment lands.",
   verdict: "Portfolio candidate.",
@@ -56,4 +59,19 @@ test("generateManifest shows the AI rating when a human override differs", () =>
   const manifest = generateManifest([photo], { 0: cull }, {}, null, null, { 0: "CUT" });
 
   assert.match(manifest, /Rating: CUT \(human override; AI rated SELECT\)/);
+});
+
+test("generateManifest includes editor notes fields for deep results", () => {
+  const manifest = generateManifest(
+    [photo],
+    { 0: cull },
+    { 0: deep },
+    "The shortlist reads strongest as a quiet graphic sequence.",
+    [0],
+  );
+
+  assert.match(manifest, /EDITOR'S NOTES/);
+  assert.match(manifest, /Editorial Role: anchor/);
+  assert.match(manifest, /Edit Direction: Hold the simple graphic read; deepen contrast while keeping the red field clean\./);
+  assert.match(manifest, /Crop \/ Composition: Keep the centered geometry; avoid cropping tighter\./);
 });

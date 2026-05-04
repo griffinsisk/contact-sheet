@@ -9,7 +9,7 @@ interface Props {
 
 const WORKFLOW_ITEMS = [
   { icon: "auto_awesome_motion", label: "CULL", phases: ["culling", "culled"] as Phase[] },
-  { icon: "psychology", label: "REVIEW", phases: ["reviewing", "reviewed"] as Phase[] },
+  { icon: "edit_note", label: "NOTES", phases: ["reviewing", "reviewed"] as Phase[] },
 ];
 
 export default function Sidebar({ phase, onAddFolder }: Props) {

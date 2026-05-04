@@ -137,12 +137,12 @@ export default function PhotoGrid({
                 <TasteStarButton photo={photo} rating={rating ?? null} size="sm" className="glass-loupe w-7 h-7 flex items-center justify-center" />
               </div>
 
-              {/* Deep review toggle (after cull) */}
+              {/* Shortlist development toggle (after cull) */}
               {(phase === "culled") && cull && (
                 <div className="absolute bottom-3 left-3">
                   <button
                     onClick={(e) => { e.stopPropagation(); onDeepToggle(index); }}
-                    aria-label={`${isDeepSelected ? "Remove from" : "Add to"} deep review: ${photo.name}`}
+                    aria-label={`${isDeepSelected ? "Remove from" : "Add to"} shortlist development: ${photo.name}`}
                     aria-pressed={isDeepSelected}
                     className={`px-3 py-1 font-label text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors ${
                       isDeepSelected
@@ -153,7 +153,7 @@ export default function PhotoGrid({
                     {isDeepSelected && (
                       <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'wght' 700" }}>check</span>
                     )}
-                    REVIEW
+                    DEVELOP
                   </button>
                 </div>
               )}

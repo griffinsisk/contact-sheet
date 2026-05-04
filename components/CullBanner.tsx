@@ -7,6 +7,8 @@ interface Props {
 }
 
 export default function CullBanner({ deepCount, onStartDeepReview, isRestored }: Props) {
+  const photoLabel = `${deepCount} ${deepCount === 1 ? "photo" : "photos"}`;
+
   return (
     <div className="bg-primary px-8 py-4 flex justify-between items-center">
       <div className="flex items-center gap-3">
@@ -27,14 +29,14 @@ export default function CullBanner({ deepCount, onStartDeepReview, isRestored }:
       ) : deepCount > 0 ? (
         <button
           onClick={onStartDeepReview}
-          aria-label={`Start deep review of ${deepCount} photos`}
+          aria-label={`Develop shortlist for ${photoLabel}`}
           className="bg-on-primary text-primary px-6 py-2 font-label font-bold text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-all"
         >
-          DEEP REVIEW {deepCount} {deepCount === 1 ? "PHOTO" : "PHOTOS"}
+          DEVELOP SHORTLIST · {deepCount}
         </button>
       ) : (
         <span className="font-label text-xs text-on-primary/70 uppercase tracking-widest">
-          Toggle "Review" on photos below, then deep review
+          Toggle "Develop" on photos below, then build editor's notes
         </span>
       )}
     </div>

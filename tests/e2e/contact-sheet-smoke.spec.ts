@@ -98,6 +98,34 @@ test.beforeEach(async ({ page }) => {
       }),
     });
   });
+
+  await page.route("**/api/deep-review", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        text: JSON.stringify({
+          analysis: [
+            {
+              index: 0,
+              rating: "SELECT",
+              score: 76,
+              scores: { impact: 76, composition: 74, rawQuality: 82, craftExecution: 72, story: 70 },
+              title: "Red Study",
+              editorialRole: "anchor",
+              editDirection: "Hold the simple graphic read; deepen contrast while keeping the red field clean.",
+              cropOrCompositionNote: "Keep the centered geometry; avoid cropping tighter.",
+              technical: "Clean file with enough tonal room for a controlled edit.",
+              style_story: "Works as a quiet graphic anchor for the shortlist.",
+              verdict: "Use this as the opening anchor if the set leans minimal.",
+            },
+          ],
+          curatorial_notes: "The shortlist reads strongest as a quiet graphic sequence.",
+          recommended_sequence: [0],
+        }),
+        truncated: false,
+      }),
+    });
+  });
 });
 
 test("cull, correction, and star signals are persisted with mocked APIs", async ({ page }) => {
@@ -170,6 +198,24 @@ test("seeded favorite duplicates are recognized during cull scoring", async ({ p
   await page.getByRole("button", { name: /START CULL/i }).click();
 
   await expect(page.getByRole("button", { name: /seed-0\.png, SELECT, score 74/ })).toBeVisible();
+});
+
+test("develop shortlist shows editor notes and secondary score", async ({ page }) => {
+  await uploadAndCullTwoPhotos(page);
+
+  await expect(page.getByRole("button", { name: /Develop shortlist for 1 photo/i })).toBeVisible();
+  await page.getByRole("button", { name: /Develop shortlist for 1 photo/i }).click();
+
+  await expect(page.getByText("Editor's Notes")).toBeVisible();
+  await expect(page.getByText("The shortlist reads strongest as a quiet graphic sequence.")).toBeVisible();
+
+  await page.getByRole("button", { name: /red-dot\.png, SELECT, score 76/ }).click();
+  await expect(page.getByText("ANCHOR", { exact: true })).toBeVisible();
+  await expect(page.getByText("EDIT DIRECTION")).toBeVisible();
+  await expect(page.getByText("Hold the simple graphic read; deepen contrast while keeping the red field clean.")).toBeVisible();
+  await expect(page.getByText("CROP / COMPOSITION")).toBeVisible();
+  await expect(page.getByText("Keep the centered geometry; avoid cropping tighter.")).toBeVisible();
+  await expect(page.getByText("EDITOR'S SCORE")).toBeVisible();
 });
 
 test("reverting a correction back to the AI rating removes the override signal", async ({ page }) => {

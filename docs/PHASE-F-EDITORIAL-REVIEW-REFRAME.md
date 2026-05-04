@@ -1,6 +1,17 @@
 # Phase F - Editorial Review Reframe
 
-## Status: candidate follow-up after Phase E
+## Status: implemented locally on `feature/editorial-review-reframe`
+
+Phase F has been implemented and verified locally. It is not yet merged or deployed.
+
+Verification completed on 2026-05-04:
+
+```bash
+npm run typecheck      # passed
+npm run test:unit      # 23 passed
+npm run test:e2e       # 6 passed
+npm run build          # passed
+```
 
 Phase E made the cull pass stronger: scoring is now app-side, profile-aware, bounded, inspectable, and covered by live evals. That changes the role of the existing Deep Review feature.
 
@@ -19,7 +30,7 @@ The useful parts of Deep Review are not the second rating. They are:
 - richer critique for selected frames
 - title and description generation for export
 - edit/development direction
-- set-level curatorial notes
+- set-level editor's notes
 - recommended sequence
 
 ## Product Positioning
@@ -57,7 +68,7 @@ Editorial review should answer:
 - Is this a portfolio anchor, supporting image, transition frame, or near miss?
 - How does the selected set work together?
 
-## Proposed Output Shape
+## Implemented Output Shape
 
 Keep:
 
@@ -68,30 +79,26 @@ Keep:
 - `curatorial_notes`
 - `recommended_sequence`
 
-Consider adding:
+Added optional per-photo fields:
 
 ```ts
 editorialRole: "anchor" | "supporting" | "transition" | "detail" | "near_miss";
 editDirection: string;
 cropOrCompositionNote?: string;
-sequenceRationale?: string;
 ```
 
-Consider reducing or hiding:
-
-- second `score`
-- second `rating`
-- repeated dimension bars
-
-If scores remain in the data model for compatibility, the UI should make them secondary to the editorial notes. The user should not read this as a re-cull.
+The second `score`, `rating`, and dimension bars remain in the data model for compatibility, but the UI now makes the score secondary to editorial guidance. The user should read this as shortlist development, not a re-cull.
 
 ## UX Changes
 
-- Rename the CTA from `DEEP REVIEW N PHOTOS` to `DEVELOP SHORTLIST` or `EDITOR'S NOTES`.
-- Rename the grid toggle from `Review` to something like `Develop` or `Notes`.
-- In DetailPanel, prioritize editorial role, edit direction, and verdict over a second score.
-- Keep set-level notes visible after the pass; this is one of the strongest differentiators from cull.
-- Export should continue to use deep/editorial titles and descriptions when present.
+- CTA is now `DEVELOP SHORTLIST`.
+- Grid toggle is now `DEVELOP`.
+- Progress and sidebar copy now frame the pass as shortlist notes/development.
+- DetailPanel leads with `Editor's Notes`, editorial role, edit direction, crop/composition, and verdict.
+- The second score is shown lower as `EDITOR'S SCORE` with secondary rubric dimensions.
+- Set-level notes are shown as `Editor's Notes`.
+- Manifest export includes optional editorial role, edit direction, and crop/composition fields when present.
+- XMP export continues to use deep/editorial titles and descriptions when present.
 
 ## Non-Goals
 
@@ -102,7 +109,7 @@ If scores remain in the data model for compatibility, the UI should make them se
 
 ## Validation
 
-Manual validation should focus on whether the feature earns its cost and time:
+Manual validation should still focus on whether the feature earns its cost and time:
 
 - After a Phase E cull, does the CTA feel like the obvious next step for a shortlist?
 - Do the notes help decide edit direction or sequencing?
@@ -113,9 +120,11 @@ Success means users understand this as editorial development, not a second opini
 
 ## Implementation Sketch
 
-1. Update product language in `CullBanner`, grid toggle labels, progress copy, and docs.
-2. Adjust the deep-review prompt to emphasize edit direction, role, set cohesion, and sequence rationale.
-3. Add optional structured fields for editorial role and edit direction.
-4. Update DetailPanel to lead with editorial notes and de-emphasize repeated scoring.
-5. Preserve old saved sessions by rendering missing editorial fields gracefully.
-6. Add mocked e2e coverage for the renamed flow and one export assertion if metadata changes.
+Completed:
+
+1. Updated product language in `CullBanner`, grid toggle labels, progress copy, sidebar, export copy, and docs.
+2. Adjusted the deep-review prompt to emphasize edit direction, role, set cohesion, and sequence rationale.
+3. Added optional structured fields for editorial role, edit direction, and crop/composition notes.
+4. Updated DetailPanel to lead with editorial notes and de-emphasize repeated scoring.
+5. Preserved old saved sessions by rendering missing editorial fields gracefully.
+6. Added mocked e2e coverage for the renamed flow and unit coverage for prompt/export contract changes.

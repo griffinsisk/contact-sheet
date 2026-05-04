@@ -1,17 +1,27 @@
 # Next Session — Phase F: Develop Shortlist / Editor's Notes
 
 **Updated:** 2026-05-04
-**Current branch:** `main`
-**Prod:** https://contact-sheet-three.vercel.app — Phases A/B/C/D/E live.
+**Current branch:** `feature/editorial-review-reframe`
+**Prod:** https://contact-sheet-three.vercel.app — Phases A/B/C/D/E live. Phase F is local only until merged/deployed.
 **Last shipped PR:** #4 — Phase E profile-aware scoring.
-**Next plan:** `docs/PHASE-F-EDITORIAL-REVIEW-REFRAME.md`
+**Current plan:** `docs/PHASE-F-EDITORIAL-REVIEW-REFRAME.md`
 **Phase E plan/results:** `docs/PHASE-E-PROFILE-AWARE-SCORING.md`, `docs/PHASE-E-TEST-RESULTS.md`
 
 ## Current State
 
-Phase E is shipped to production.
+Phase E is shipped to production. Phase F is implemented locally on `feature/editorial-review-reframe`.
 
-What landed:
+Phase F local work:
+
+- Reframed the post-cull pass from Deep Review to **Develop Shortlist**.
+- Output framing is now **Editor's Notes**.
+- Added optional `DeepResult` fields: `editorialRole`, `editDirection`, `cropOrCompositionNote`.
+- Reworked the deep-review prompt around shortlist development and edit direction.
+- Updated DetailPanel so editorial notes lead and the second score appears lower as `EDITOR'S SCORE`.
+- Updated manifest export to include optional editorial fields when present.
+- Added focused e2e coverage and unit prompt/export coverage.
+
+Phase E production work:
 
 - Deterministic rubric scoring helpers in `lib/scoring.ts`.
 - Bounded profile-aware scoring in `lib/profile-scoring.ts`.
@@ -21,13 +31,18 @@ What landed:
 - Live AI eval harness: `npm run eval:ai`.
 - Unit/e2e coverage for score math, profile math, and duplicate-library behavior.
 
-Verification completed:
+Verification completed for Phase F local branch:
 
 ```bash
 npm run typecheck      # passed
-npm run test:unit      # 21 passed
-npm run test:e2e       # 5 passed
+npm run test:unit      # 23 passed
+npm run test:e2e       # 6 passed
 npm run build          # passed
+```
+
+Phase E paid eval remains the latest live AI eval:
+
+```bash
 npm run eval:ai        # paid live eval passed: 8/8
 ```
 
@@ -38,9 +53,9 @@ Production smoke:
 
 ## Next Build Direction
 
-The next candidate is Phase F: reframe the current Deep Review feature.
+Immediate next step is to review, push, and open a Vercel preview for Phase F. After preview smoke passes, merge/deploy.
 
-Core decision:
+Core Phase F decision:
 
 - Cull is now the decision engine.
 - Deep Review should stop reading like a second scoring pass.
@@ -51,53 +66,25 @@ Recommended product language:
 - Action label: **Develop Shortlist**
 - Output framing: **Editor's Notes**
 
-Do not start implementation from memory. Read `docs/PHASE-F-EDITORIAL-REVIEW-REFRAME.md` first.
+Do not start follow-up work from memory. Read `docs/PHASE-F-EDITORIAL-REVIEW-REFRAME.md` first.
 
 ## First 3 Minutes
 
 ```bash
 cd "/Users/griffin.sisk/Desktop/AI Projects/contact-sheet-repo"
-git branch --show-current        # should be main
+git branch --show-current        # should be feature/editorial-review-reframe until merged
 git status --short               # should be clean
-git pull --ff-only
 npm run typecheck
 npm run test:unit
 npm run test:e2e
 ```
 
-## Recommended Phase F Scope
+## Recommended Phase F Review Scope
 
-Start with a focused UX/product pass, not a broad architecture rewrite.
-
-1. Rename the user-facing flow.
-   - `Deep Review` → `Develop Shortlist` or `Editor's Notes`.
-   - Grid toggle copy should stop implying a second judgment pass.
-   - Progress and export copy should follow the same language.
-
-2. Adjust the prompt.
-   - Emphasize edit direction, crop/composition advice, image role, set cohesion, and sequence rationale.
-   - De-emphasize second-pass scoring.
-
-3. Update DetailPanel.
-   - Lead with editorial role, edit direction, title, verdict, and set context.
-   - Keep score/rating fields compatible but visually secondary.
-
-4. Preserve exports.
-   - Titles/descriptions from this pass remain useful for manifest/XMP.
-   - If new structured fields are added, update export only where it adds real workflow value.
-
-5. Add targeted tests.
-   - Mocked e2e should cover the renamed CTA/toggle/progress.
-   - If output shape changes, add unit coverage for backwards-compatible rendering/export behavior.
-
-## Open Product Questions
-
-Resolve these before implementation:
-
-- Should the primary label be `Develop Shortlist` or `Editor's Notes`?
-- Should second-pass score/rating remain visible, hidden, or moved lower in DetailPanel?
-- Which new structured field is worth adding first: `editorialRole`, `editDirection`, or `sequenceRationale`?
-- Should Phase F be UI/prompt-only, or should it include data model changes?
+1. Run local manual smoke: upload → cull → develop shortlist → open detail panel → export manifest.
+2. Confirm the second score feels secondary enough in DetailPanel.
+3. Check Vercel preview with the same flow before merge.
+4. If the prompt output feels too verbose or generic in live testing, tighten only the prompt voice; the data shape is already in place.
 
 ## Parking Lot
 

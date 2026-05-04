@@ -129,7 +129,7 @@ export function generateManifest(
   t += "=".repeat(60) + "\n\n";
 
   if (curatorialNotes) {
-    t += "CURATORIAL NOTES\n" + "-".repeat(40) + "\n" + curatorialNotes + "\n\n";
+    t += "EDITOR'S NOTES\n" + "-".repeat(40) + "\n" + curatorialNotes + "\n\n";
   }
   if (recommendedSequence?.length) {
     t += "RECOMMENDED SEQUENCE\n" + "-".repeat(40) + "\n";
@@ -158,6 +158,9 @@ export function generateManifest(
     }
     if (d?.scores) t += `Impact: ${d.scores.impact} | Composition: ${d.scores.composition} | Raw Quality: ${d.scores.rawQuality} | Craft: ${d.scores.craftExecution} | Story: ${d.scores.story}\n`;
     if (d?.title) t += `Title: ${d.title}\n`;
+    if (d?.editorialRole) t += `Editorial Role: ${d.editorialRole}\n`;
+    if (d?.editDirection) t += `Edit Direction: ${d.editDirection}\n`;
+    if (d?.cropOrCompositionNote) t += `Crop / Composition: ${d.cropOrCompositionNote}\n`;
     t += "\n";
     if (d) {
       t += `Technical:\n${d.technical}\n\nStyle & Story:\n${d.style_story}\n\nVerdict: ${d.verdict}\n`;
