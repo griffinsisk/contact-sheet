@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { TasteEntry, contentHash, generateTasteProfile, getTasteLibraryClient } from "@/lib/taste-library";
+import { TasteEntry, generateTasteProfile, getTasteLibraryClient } from "@/lib/taste-library";
+import { computePhotoHash } from "@/lib/photo-hash";
+import { resizeImage } from "@/lib/resize";
 import { bucketDelta } from "@/lib/overrides";
 import { isE2EMockPro } from "@/lib/e2e";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
@@ -38,36 +40,6 @@ const ACCEPT_EXT = /\.(jpe?g|png)$/i;
 function isValidImage(file: File): boolean {
   if (ACCEPT_MIME.includes(file.type)) return true;
   return ACCEPT_EXT.test(file.name);
-}
-
-async function downsizeFileTo512(file: File): Promise<{ bytes: Uint8Array; base64: string }> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error(`Failed to decode ${file.name}`));
-      i.src = url;
-    });
-    const canvas = document.createElement("canvas");
-    const maxDim = 512;
-    let w = img.width, h = img.height;
-    if (w > h && w > maxDim) { h = (h * maxDim) / w; w = maxDim; }
-    else if (h > maxDim) { w = (w * maxDim) / h; h = maxDim; }
-    canvas.width = Math.round(w);
-    canvas.height = Math.round(h);
-    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/jpeg", 0.7);
-    });
-    const buf = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    return { bytes, base64: btoa(bin) };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
 
 export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
@@ -203,10 +175,10 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
       for (let i = 0; i < staged.length; i++) {
         const file = staged[i];
         try {
-          const { bytes, base64 } = await downsizeFileTo512(file);
-          const hash = await contentHash(bytes);
+          const photo = await resizeImage(file);
+          const { hash, image } = await computePhotoHash(photo);
           if (!existing.has(hash) && !entries.some((e) => e.photoHash === hash)) {
-            entries.push({ photoHash: hash, addedAt: Date.now(), image: base64 });
+            entries.push({ photoHash: hash, addedAt: Date.now(), image });
           }
         } catch (err) {
           console.error(`Failed to process ${file.name}:`, err);

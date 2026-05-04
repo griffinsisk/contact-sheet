@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Photo, CullResult, DeepResult, Rating, ProviderConfig } from "@/lib/types";
+import { Photo, CullResult, DeepResult, Rating, ProviderConfig, ProfileAlignment } from "@/lib/types";
 import { formatExifLine, formatExifCamera } from "@/lib/exif";
 import { SCORE_DIMENSIONS } from "@/lib/constants";
 import { runResolutionTest } from "@/lib/api";
@@ -17,14 +17,12 @@ interface Props {
   onClose: () => void;
 }
 
-type ProfileAlignment = "aligned" | "diverged" | "neutral";
-
 function detectProfileAlignment(note: string): ProfileAlignment | null {
   if (!note) return null;
   const lower = note.toLowerCase();
   if (lower.includes("aligns with your library")) return "aligned";
   if (lower.includes("diverges from your library")) return "diverged";
-  if (lower.includes("outside your library")) return "neutral";
+  if (lower.includes("outside your library")) return "outside";
   return null;
 }
 
@@ -93,6 +91,19 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
   if (!photo) return null;
 
   const analysis = deep || cull;
+  const hasCullScoreBreakdown = !!cull && (
+    cull.rubricScore !== undefined
+    || cull.profileDelta !== undefined
+    || cull.finalScore !== undefined
+  );
+  const cullScoreBreakdown = cull && hasCullScoreBreakdown
+    ? {
+        rubricScore: cull.rubricScore ?? cull.score,
+        profileDelta: cull.profileDelta ?? 0,
+        finalScore: cull.finalScore ?? cull.score,
+        affinity: cull.profileAffinity ?? null,
+      }
+    : null;
   const exifParts: { label: string; value: string }[] = [];
   if (photo.exif) {
     if (photo.exif.shutterSpeed) exifParts.push({ label: "SHUTTER", value: photo.exif.shutterSpeed });
@@ -164,6 +175,66 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
               <span className="block font-label text-[10px] text-on-surface-variant">FINAL SCORE</span>
               <span className="font-label text-5xl font-black text-primary">{analysis.score}</span>
             </div>
+          </div>
+        )}
+
+        {/* Profile-aware score breakdown */}
+        {!deep && cullScoreBreakdown && (
+          <div className="mb-8 bg-surface-low border-l-2 border-primary/30 p-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <div className="font-label text-[9px] text-on-surface-variant/70 uppercase tracking-widest">
+                  RUBRIC
+                </div>
+                <div className="font-label text-2xl font-black text-on-surface">
+                  {cullScoreBreakdown.rubricScore}
+                </div>
+              </div>
+              <div>
+                <div className="font-label text-[9px] text-on-surface-variant/70 uppercase tracking-widest">
+                  PROFILE
+                </div>
+                <div className={`font-label text-2xl font-black ${
+                  cullScoreBreakdown.profileDelta > 0
+                    ? "text-primary"
+                    : cullScoreBreakdown.profileDelta < 0
+                      ? "text-tertiary"
+                      : "text-on-surface-variant"
+                }`}>
+                  {cullScoreBreakdown.profileDelta > 0 ? "+" : ""}{cullScoreBreakdown.profileDelta}
+                </div>
+              </div>
+              <div>
+                <div className="font-label text-[9px] text-on-surface-variant/70 uppercase tracking-widest">
+                  FINAL
+                </div>
+                <div className="font-label text-2xl font-black text-primary">
+                  {cullScoreBreakdown.finalScore}
+                </div>
+              </div>
+            </div>
+            {cullScoreBreakdown.affinity && (
+              <div className="mt-4 pt-4 border-t border-outline-variant/30 space-y-2">
+                {cullScoreBreakdown.affinity.matchedTraits.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {cullScoreBreakdown.affinity.matchedTraits.map((trait) => (
+                      <span key={`match-${trait}`} className="px-2 py-1 bg-primary/10 text-primary font-label text-[9px] uppercase tracking-widest">
+                        {trait}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {cullScoreBreakdown.affinity.contradictedTraits.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {cullScoreBreakdown.affinity.contradictedTraits.map((trait) => (
+                      <span key={`contradict-${trait}`} className="px-2 py-1 bg-tertiary/10 text-tertiary font-label text-[9px] uppercase tracking-widest">
+                        {trait}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -270,17 +341,17 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
               CULL NOTE
             </h3>
             {(() => {
-              const alignment = detectProfileAlignment(cull.reason);
+              const alignment = cull.profileAffinity?.alignment ?? detectProfileAlignment(cull.reason);
               if (!alignment) return null;
               const badgeStyles = {
                 aligned: "bg-primary/15 text-primary border-primary/40",
                 diverged: "bg-tertiary/15 text-tertiary border-tertiary/40",
-                neutral: "bg-surface-highest text-on-surface-variant border-outline-variant",
+                outside: "bg-surface-highest text-on-surface-variant border-outline-variant",
               } as const;
               const labels = {
                 aligned: "Aligns with your library",
                 diverged: "Diverges from your library",
-                neutral: "Outside your library's strong traits",
+                outside: "Outside your library's strong traits",
               } as const;
               return (
                 <div className={`inline-flex items-center gap-1.5 mb-3 px-2.5 py-1 border font-label text-[10px] uppercase tracking-widest ${badgeStyles[alignment]}`}>

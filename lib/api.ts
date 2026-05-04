@@ -4,12 +4,20 @@ import { CULL_PROMPT, DEEP_REVIEW_PROMPT, COMPARE_PROMPT, EXPERIENCE_VOICE, buil
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "./constants";
 import { formatExifForPrompt } from "./exif";
 import { downsizeForCull, resizeToMax } from "./resize";
+import { contentHash } from "./taste-library";
+import { applyProfileScoring } from "./profile-scoring";
 
 type ProgressFn = (message: string, batch: number, total: number) => void;
 
 type ProxyEndpoint = "cull" | "deep-review" | "compare";
 
-type TasteProfileArg = { prose: string; aestheticTags: string[] } | null;
+type TasteProfileArg = {
+  prose: string;
+  aestheticTags: string[];
+  libraryPhotoHashes?: string[];
+} | null;
+
+type PromptProfile = { prose: string; aestheticTags: string[] } | null;
 
 interface ApiCallArgs {
   /** When null, the call is proxied through /api/{endpoint} (free/pro tiers). */
@@ -60,6 +68,38 @@ async function dispatchApiCall(
   return res.json();
 }
 
+function promptProfile(profile: TasteProfileArg): PromptProfile {
+  if (!profile) return null;
+  return {
+    prose: profile.prose,
+    aestheticTags: profile.aestheticTags,
+  };
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function findLibraryMatches(
+  cullImages: string[],
+  profile: TasteProfileArg,
+): Promise<boolean[]> {
+  const libraryHashes = new Set(profile?.libraryPhotoHashes ?? []);
+  if (libraryHashes.size === 0) return cullImages.map(() => false);
+
+  return Promise.all(cullImages.map(async (image) => {
+    try {
+      const hash = await contentHash(base64ToBytes(image));
+      return libraryHashes.has(hash);
+    } catch {
+      return false;
+    }
+  }));
+}
+
 export async function runCull(
   photos: Photo[],
   config: ProviderConfig | null,
@@ -87,26 +127,34 @@ export async function runCull(
     const textParts = batch.map((b, i) =>
       `[Photo ${i}: ${b.photo.name}${formatExifForPrompt(b.photo.exif)}]`
     );
+    const profileForPrompt = promptProfile(profile);
+    const libraryMatchesPromise = findLibraryMatches(cullImages, profile);
 
     const response = await dispatchApiCall({
       config,
       endpoint: "cull",
-      system: buildCullPrompt(intent, profile),
+      system: buildCullPrompt(intent, profileForPrompt),
       images,
       textParts,
       maxTokens: 4096,
       extraBody: {
         ...(intent ? { intent } : {}),
-        ...(profile ? { profile } : {}),
+        ...(profileForPrompt ? { profile: profileForPrompt } : {}),
       },
     });
 
     const parsed = parseJSON(response.text, response.truncated) as CullResponse;
     const cullData = parsed.cull || [];
+    const libraryMatches = await libraryMatchesPromise;
 
     cullData.forEach(c => {
-      const gIdx = batch[c.index]?.globalIndex ?? c.index;
-      allResults[gIdx] = { ...c, index: gIdx };
+      const parsedIndex = Number(c.index);
+      const localIndex = Number.isInteger(parsedIndex) ? parsedIndex : 0;
+      const gIdx = batch[localIndex]?.globalIndex ?? localIndex;
+      allResults[gIdx] = applyProfileScoring(
+        { ...c, index: gIdx },
+        { hasProfile: !!profileForPrompt, libraryMatch: libraryMatches[localIndex] },
+      );
     });
   }
 

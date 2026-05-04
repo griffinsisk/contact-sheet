@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "tsx --test tests/unit/*.test.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "eval:ai": "tsx scripts/eval-ai.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.2",
