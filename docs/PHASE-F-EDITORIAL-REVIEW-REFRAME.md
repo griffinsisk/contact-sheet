@@ -1,14 +1,14 @@
 # Phase F - Editorial Review Reframe
 
-## Status: PR open, preview checks passed
+## Status: PR open, functional checks passed
 
 Phase F has been implemented on `feature/editorial-review-reframe`, pushed to GitHub, and opened as PR #5. It is not yet merged or deployed to production.
 
 - PR: https://github.com/griffinsisk/contact-sheet/pull/5
 - Latest functional commit: `36c4b12` (`Include promoted selects in shortlist development`)
 - Vercel preview: https://contact-sheet-git-feature-editoria-10da4d-griffinsisks-projects.vercel.app
-- Vercel status: passed
-- CodeRabbit status: passed
+- Functional check status: Vercel and CodeRabbit passed on `36c4b12`.
+- Current PR head may include docs-only handoff commits; recheck with `gh pr checks 5`.
 - Preview access note: direct HTTP check returns 401 because Vercel preview protection/SSO is enabled.
 - Remaining work: run manual preview smoke, merge PR #5, then smoke production.
 
@@ -19,7 +19,7 @@ npm run typecheck      # passed
 npm run test:unit      # 29 passed
 npm run test:e2e       # 7 passed
 npm run build          # passed
-gh pr checks 5         # Vercel, Vercel Preview Comments, and CodeRabbit passed
+gh pr checks 5         # latest functional commit passed Vercel, Vercel Preview Comments, and CodeRabbit; recheck current PR head
 ```
 
 Phase E made the cull pass stronger: scoring is now app-side, profile-aware, bounded, inspectable, and covered by live evals. That changes the role of the existing Deep Review feature.

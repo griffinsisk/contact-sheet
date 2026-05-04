@@ -17,8 +17,8 @@ Phase F PR state:
 
 - PR #5 is open against `main`: https://github.com/griffinsisk/contact-sheet/pull/5
 - Latest functional commit: `36c4b12` (`Include promoted selects in shortlist development`)
-- Vercel preview check passed.
-- CodeRabbit passed on the latest PR head.
+- Functional checks passed on `36c4b12`; docs-only handoff commits may restart PR checks.
+- Recheck the current PR head with `gh pr checks 5` at session start.
 - Preview URL: https://contact-sheet-git-feature-editoria-10da4d-griffinsisks-projects.vercel.app
 - Direct `curl -I` returned HTTP 401 because Vercel preview protection/SSO is enabled. Open the preview while logged into the Vercel account/team.
 - GitHub reports merge state `CLEAN` at the time of this handoff.
@@ -62,7 +62,7 @@ npm run build          # passed
 Vercel:
 
 ```bash
-gh pr checks 5         # Vercel passed, Vercel Preview Comments passed, CodeRabbit passed
+gh pr checks 5         # latest functional commit passed Vercel, Vercel Preview Comments, and CodeRabbit; recheck current PR head
 ```
 
 Phase E paid eval remains the latest live AI eval:
