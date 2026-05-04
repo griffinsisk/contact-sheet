@@ -1,8 +1,14 @@
 # Phase F - Editorial Review Reframe
 
-## Status: implemented locally on `feature/editorial-review-reframe`
+## Status: PR open, preview passed
 
-Phase F has been implemented and verified locally. It is not yet merged or deployed.
+Phase F has been implemented on `feature/editorial-review-reframe`, pushed to GitHub, and opened as PR #5. It is not yet merged or deployed to production.
+
+- PR: https://github.com/griffinsisk/contact-sheet/pull/5
+- Vercel preview: https://contact-sheet-git-feature-editoria-10da4d-griffinsisks-projects.vercel.app
+- Vercel status: passed
+- Preview access note: direct HTTP check returns 401 because Vercel preview protection/SSO is enabled.
+- Remaining work: run manual preview smoke, merge PR #5, then smoke production.
 
 Verification completed on 2026-05-04:
 
@@ -11,6 +17,7 @@ npm run typecheck      # passed
 npm run test:unit      # 23 passed
 npm run test:e2e       # 6 passed
 npm run build          # passed
+gh pr checks 5         # Vercel passed
 ```
 
 Phase E made the cull pass stronger: scoring is now app-side, profile-aware, bounded, inspectable, and covered by live evals. That changes the role of the existing Deep Review feature.
@@ -117,6 +124,16 @@ Manual validation should still focus on whether the feature earns its cost and t
 - Do exports become more useful with titles/descriptions from this pass?
 
 Success means users understand this as editorial development, not a second opinion on the cull.
+
+Preview smoke checklist:
+
+- Open the preview while logged into the Vercel account/team.
+- Upload a small set and run cull.
+- Confirm the post-cull action reads `DEVELOP SHORTLIST`.
+- Run shortlist development and confirm set-level `Editor's Notes` appears.
+- Open a developed frame and confirm editorial guidance appears before `EDITOR'S SCORE`.
+- Export the manifest and confirm editorial fields are included when returned by the model.
+- If preview smoke passes, merge PR #5 and verify production.
 
 ## Implementation Sketch
 

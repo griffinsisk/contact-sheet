@@ -2,16 +2,26 @@
 
 **Updated:** 2026-05-04
 **Current branch:** `feature/editorial-review-reframe`
-**Prod:** https://contact-sheet-three.vercel.app — Phases A/B/C/D/E live. Phase F is local only until merged/deployed.
+**Prod:** https://contact-sheet-three.vercel.app — Phases A/B/C/D/E live. Phase F is not merged/deployed yet.
+**Current PR:** https://github.com/griffinsisk/contact-sheet/pull/5
+**Vercel preview:** https://contact-sheet-git-feature-editoria-10da4d-griffinsisks-projects.vercel.app
 **Last shipped PR:** #4 — Phase E profile-aware scoring.
 **Current plan:** `docs/PHASE-F-EDITORIAL-REVIEW-REFRAME.md`
 **Phase E plan/results:** `docs/PHASE-E-PROFILE-AWARE-SCORING.md`, `docs/PHASE-E-TEST-RESULTS.md`
 
 ## Current State
 
-Phase E is shipped to production. Phase F is implemented locally on `feature/editorial-review-reframe`.
+Phase E is shipped to production. Phase F is implemented on `feature/editorial-review-reframe`, pushed to GitHub, and open as PR #5.
 
-Phase F local work:
+Phase F PR state:
+
+- PR #5 is open against `main`: https://github.com/griffinsisk/contact-sheet/pull/5
+- Vercel preview check passed.
+- Preview URL: https://contact-sheet-git-feature-editoria-10da4d-griffinsisks-projects.vercel.app
+- Direct `curl -I` returned HTTP 401 because Vercel preview protection/SSO is enabled. Open the preview while logged into the Vercel account/team.
+- GitHub reports merge state `CLEAN` at the time of this handoff.
+
+Phase F work in the PR:
 
 - Reframed the post-cull pass from Deep Review to **Develop Shortlist**.
 - Output framing is now **Editor's Notes**.
@@ -31,13 +41,19 @@ Phase E production work:
 - Live AI eval harness: `npm run eval:ai`.
 - Unit/e2e coverage for score math, profile math, and duplicate-library behavior.
 
-Verification completed for Phase F local branch:
+Verification completed before PR #5:
 
 ```bash
 npm run typecheck      # passed
 npm run test:unit      # 23 passed
 npm run test:e2e       # 6 passed
 npm run build          # passed
+```
+
+Vercel:
+
+```bash
+gh pr checks 5         # Vercel passed, Vercel Preview Comments passed
 ```
 
 Phase E paid eval remains the latest live AI eval:
@@ -53,7 +69,7 @@ Production smoke:
 
 ## Next Build Direction
 
-Immediate next step is to review, push, and open a Vercel preview for Phase F. After preview smoke passes, merge/deploy.
+Immediate next step is preview smoke on PR #5. After preview smoke passes, merge PR #5 to `main` and confirm the production deploy.
 
 Core Phase F decision:
 
@@ -74,6 +90,8 @@ Do not start follow-up work from memory. Read `docs/PHASE-F-EDITORIAL-REVIEW-REF
 cd "/Users/griffin.sisk/Desktop/AI Projects/contact-sheet-repo"
 git branch --show-current        # should be feature/editorial-review-reframe until merged
 git status --short               # should be clean
+gh pr view 5 --json url,mergeStateStatus,statusCheckRollup
+gh pr checks 5
 npm run typecheck
 npm run test:unit
 npm run test:e2e
@@ -81,10 +99,19 @@ npm run test:e2e
 
 ## Recommended Phase F Review Scope
 
-1. Run local manual smoke: upload → cull → develop shortlist → open detail panel → export manifest.
-2. Confirm the second score feels secondary enough in DetailPanel.
-3. Check Vercel preview with the same flow before merge.
-4. If the prompt output feels too verbose or generic in live testing, tighten only the prompt voice; the data shape is already in place.
+1. Open the Vercel preview while logged into Vercel/team SSO.
+2. Run manual smoke on preview: upload → cull → develop shortlist → open detail panel → export manifest.
+3. Confirm the second score feels secondary enough in DetailPanel.
+4. If preview smoke passes, merge PR #5 and watch the production Vercel deploy.
+5. Smoke production at https://contact-sheet-three.vercel.app after deploy.
+
+Preview-specific things to inspect:
+
+1. Post-cull CTA says `DEVELOP SHORTLIST`.
+2. Grid toggle says `DEVELOP`.
+3. Set-level result heading says `Editor's Notes`.
+4. DetailPanel shows editorial role, edit direction, crop/composition, verdict, then `EDITOR'S SCORE` lower down.
+5. Manifest export includes `EDITOR'S NOTES`, `Editorial Role`, `Edit Direction`, and `Crop / Composition` when the model returns them.
 
 ## Parking Lot
 
