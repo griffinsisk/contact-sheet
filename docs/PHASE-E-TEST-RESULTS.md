@@ -35,8 +35,14 @@ Observations:
 - The divergent profile case showed counter-signal behavior with a -2 delta.
 - No range calibration was needed after this first run.
 
-## Remaining Validation
+## 2026-05-04 — Manual Production Smoke
 
-- Run a manual validation cull on the wildlife/base set and compare against the Phase D duplicate-photo issue.
-- Confirm the DetailPanel breakdown reads clearly in the real app after a live cull.
-- Watch for deltas that feel too timid/aggressive in manual review, especially outside the 8 eval fixtures.
+Production URL: https://contact-sheet-three.vercel.app
+
+Status: **PASS — manual production flow ran smoothly.**
+
+Notes:
+
+- Real app smoke completed after the Phase E production deploy.
+- No Phase E blocker reported from the cull/detail-panel flow.
+- The remaining concern is product positioning of the old Deep Review feature, now captured as Phase F in `docs/PHASE-F-EDITORIAL-REVIEW-REFRAME.md`.
