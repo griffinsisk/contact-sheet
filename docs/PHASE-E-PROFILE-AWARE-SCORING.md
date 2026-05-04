@@ -179,6 +179,7 @@ That's the promise the profile mechanism implicitly makes today and currently fa
 ## What this does *not* deliver*
 
 - Multi-photo visual anchors in the cull prompt (the "pass 5 favorite thumbnails alongside the new batch" idea). Reasonable Phase F, not E.
+- Deep Review repositioning. After Phase E, cull is the decision engine; Deep Review should become an editorial shortlist-development layer, not a second scoring pass. Captured in `docs/PHASE-F-EDITORIAL-REVIEW-REFRAME.md`.
 - Per-axis weight modifiers from regen output (the original Phase E sketch I floated). The codex-feedback architecture is more fine-grained and per-frame, which is better; the per-intent weights idea is subsumed.
 - Deterministic scoring across runs. The model still scores per frame; the app's bounded math is deterministic given the model's output, not absolutely deterministic across calls.
 
