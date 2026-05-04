@@ -16,7 +16,9 @@ Phase E is shipped to production. Phase F is implemented on `feature/editorial-r
 Phase F PR state:
 
 - PR #5 is open against `main`: https://github.com/griffinsisk/contact-sheet/pull/5
+- Latest functional commit: `36c4b12` (`Include promoted selects in shortlist development`)
 - Vercel preview check passed.
+- CodeRabbit passed on the latest PR head.
 - Preview URL: https://contact-sheet-git-feature-editoria-10da4d-griffinsisks-projects.vercel.app
 - Direct `curl -I` returned HTTP 401 because Vercel preview protection/SSO is enabled. Open the preview while logged into the Vercel account/team.
 - GitHub reports merge state `CLEAN` at the time of this handoff.
@@ -31,6 +33,13 @@ Phase F work in the PR:
 - Updated manifest export to include optional editorial fields when present.
 - Added focused e2e coverage and unit prompt/export coverage.
 
+Follow-up fixes already pushed to PR #5:
+
+- Fixed Vercel `Proxy 413: request failed` during Develop Shortlist by splitting proxy payloads and downsizing proxied images before API submission.
+- Fixed editorial score precedence so app-side cull scores remain canonical where expected.
+- Added a pending-regeneration cue for newly starred favorites in the profile modal. Favorites behave like corrections: they feed the next regenerated taste profile, not the currently active profile immediately.
+- Fixed Develop Shortlist selection sync so any photo currently rated `HERO` or `SELECT` is included, including photos manually promoted from `MAYBE` or `CUT` after cull.
+
 Phase E production work:
 
 - Deterministic rubric scoring helpers in `lib/scoring.ts`.
@@ -41,19 +50,19 @@ Phase E production work:
 - Live AI eval harness: `npm run eval:ai`.
 - Unit/e2e coverage for score math, profile math, and duplicate-library behavior.
 
-Verification completed before PR #5:
+Verification completed on latest functional PR changes:
 
 ```bash
 npm run typecheck      # passed
-npm run test:unit      # 23 passed
-npm run test:e2e       # 6 passed
+npm run test:unit      # 29 passed
+npm run test:e2e       # 7 passed
 npm run build          # passed
 ```
 
 Vercel:
 
 ```bash
-gh pr checks 5         # Vercel passed, Vercel Preview Comments passed
+gh pr checks 5         # Vercel passed, Vercel Preview Comments passed, CodeRabbit passed
 ```
 
 Phase E paid eval remains the latest live AI eval:
@@ -69,7 +78,7 @@ Production smoke:
 
 ## Next Build Direction
 
-Immediate next step is preview smoke on PR #5. After preview smoke passes, merge PR #5 to `main` and confirm the production deploy.
+Immediate next step is preview smoke on PR #5 with the latest functional changes. After preview smoke passes, merge PR #5 to `main` and confirm the production deploy.
 
 Core Phase F decision:
 
@@ -112,6 +121,9 @@ Preview-specific things to inspect:
 3. Set-level result heading says `Editor's Notes`.
 4. DetailPanel shows editorial role, edit direction, crop/composition, verdict, then `EDITOR'S SCORE` lower down.
 5. Manifest export includes `EDITOR'S NOTES`, `Editorial Role`, `Edit Direction`, and `Crop / Composition` when the model returns them.
+6. Promote a `MAYBE` photo to `SELECT` and confirm the CTA count increases and Develop Shortlist sends/includes it.
+7. Confirm Develop Shortlist no longer shows `Proxy 413: request failed` on the same kind of batch that previously failed.
+8. Star a new favorite, open View Profile, and confirm the pending-regeneration cue appears until the profile is regenerated.
 
 ## Parking Lot
 

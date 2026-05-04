@@ -1,12 +1,14 @@
 # Phase F - Editorial Review Reframe
 
-## Status: PR open, preview passed
+## Status: PR open, preview checks passed
 
 Phase F has been implemented on `feature/editorial-review-reframe`, pushed to GitHub, and opened as PR #5. It is not yet merged or deployed to production.
 
 - PR: https://github.com/griffinsisk/contact-sheet/pull/5
+- Latest functional commit: `36c4b12` (`Include promoted selects in shortlist development`)
 - Vercel preview: https://contact-sheet-git-feature-editoria-10da4d-griffinsisks-projects.vercel.app
 - Vercel status: passed
+- CodeRabbit status: passed
 - Preview access note: direct HTTP check returns 401 because Vercel preview protection/SSO is enabled.
 - Remaining work: run manual preview smoke, merge PR #5, then smoke production.
 
@@ -14,10 +16,10 @@ Verification completed on 2026-05-04:
 
 ```bash
 npm run typecheck      # passed
-npm run test:unit      # 23 passed
-npm run test:e2e       # 6 passed
+npm run test:unit      # 29 passed
+npm run test:e2e       # 7 passed
 npm run build          # passed
-gh pr checks 5         # Vercel passed
+gh pr checks 5         # Vercel, Vercel Preview Comments, and CodeRabbit passed
 ```
 
 Phase E made the cull pass stronger: scoring is now app-side, profile-aware, bounded, inspectable, and covered by live evals. That changes the role of the existing Deep Review feature.
@@ -106,6 +108,9 @@ The second `score`, `rating`, and dimension bars remain in the data model for co
 - Set-level notes are shown as `Editor's Notes`.
 - Manifest export includes optional editorial role, edit direction, and crop/composition fields when present.
 - XMP export continues to use deep/editorial titles and descriptions when present.
+- Develop Shortlist now tracks the current effective rating, so manually promoted `HERO`/`SELECT` photos are included and manually demoted `MAYBE`/`CUT` photos are excluded.
+- Vercel proxy payloads for AI routes are split and downsized to avoid `Proxy 413: request failed` during larger Develop Shortlist calls.
+- Favorites now show a pending-regeneration cue in the profile modal, matching the correction signal behavior.
 
 ## Non-Goals
 
@@ -131,6 +136,9 @@ Preview smoke checklist:
 - Upload a small set and run cull.
 - Confirm the post-cull action reads `DEVELOP SHORTLIST`.
 - Run shortlist development and confirm set-level `Editor's Notes` appears.
+- Promote a `MAYBE` frame to `SELECT`, confirm the CTA count increases, and confirm Develop Shortlist includes that frame.
+- Confirm the Develop Shortlist request does not hit `Proxy 413: request failed` on the previously failing batch shape.
+- Star a favorite, open View Profile, and confirm the pending-regeneration cue appears until profile regen.
 - Open a developed frame and confirm editorial guidance appears before `EDITOR'S SCORE`.
 - Export the manifest and confirm editorial fields are included when returned by the model.
 - If preview smoke passes, merge PR #5 and verify production.
@@ -145,3 +153,4 @@ Completed:
 4. Updated DetailPanel to lead with editorial notes and de-emphasize repeated scoring.
 5. Preserved old saved sessions by rendering missing editorial fields gracefully.
 6. Added mocked e2e coverage for the renamed flow and unit coverage for prompt/export contract changes.
+7. Added e2e coverage for manually promoted selects being included in Develop Shortlist.
