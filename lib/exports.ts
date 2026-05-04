@@ -10,9 +10,10 @@ export function sanitizeFilename(title: string): string {
   return title.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "").substring(0, 60).toLowerCase();
 }
 
-// Effective rating: override > deep > cull. Score always reflects AI analysis.
-function effectiveRating(cull: CullResult, deep?: DeepResult, override?: Rating): Rating {
-  return override ?? deep?.rating ?? cull.rating;
+// Effective rating: human override > cull. Editor notes add metadata, not the
+// primary keep/cut decision.
+function effectiveRating(cull: CullResult, override?: Rating): Rating {
+  return override ?? cull.rating;
 }
 
 export function generateXMP(
@@ -21,8 +22,7 @@ export function generateXMP(
   deep?: DeepResult,
   override?: Rating,
 ): string {
-  const a = deep || cull;
-  const rating = effectiveRating(cull, deep, override);
+  const rating = effectiveRating(cull, override);
   const stars = STAR_MAP[rating] || 0;
   const label = LABEL_MAP[rating] || "";
   const title = deep?.title || "";
@@ -46,7 +46,7 @@ export function generateXMP(
       <dc:subject><rdf:Bag>
         <rdf:li>ContactSheet</rdf:li>
         <rdf:li>${rating}</rdf:li>
-        <rdf:li>Score:${a.score}</rdf:li>${override ? `\n        <rdf:li>HumanOverride</rdf:li>` : ""}
+        <rdf:li>Score:${cull.score}</rdf:li>${override ? `\n        <rdf:li>HumanOverride</rdf:li>` : ""}
       </rdf:Bag></dc:subject>
     </rdf:Description>
   </rdf:RDF>
@@ -80,7 +80,7 @@ export function generateOrgScript(
   const folders = new Set<string>();
   photos.forEach((_, i) => {
     const c = cullResults[i]; if (!c) return;
-    const rating = effectiveRating(c, deepResults[i], ratingOverrides[i]);
+    const rating = effectiveRating(c, ratingOverrides[i]);
     folders.add(rf[rating] || "04_cuts");
   });
   s += `${cmt} === Rating Tier Folders ===\n`;
@@ -89,7 +89,7 @@ export function generateOrgScript(
 
   photos.forEach((p, i) => {
     const c = cullResults[i]; if (!c) return;
-    const rating = effectiveRating(c, deepResults[i], ratingOverrides[i]);
+    const rating = effectiveRating(c, ratingOverrides[i]);
     const folder = rf[rating] || "04_cuts";
     const fileExt = p.name.split(".").pop() || "jpg";
     let destName = p.name;
@@ -136,7 +136,7 @@ export function generateManifest(
     recommendedSequence.forEach((idx, i) => {
       const p = photos[idx]; const c = cullResults[idx];
       if (p && c) {
-        const r = effectiveRating(c, deepResults[idx], ratingOverrides[idx]);
+        const r = effectiveRating(c, ratingOverrides[idx]);
         t += `${i + 1}. ${p.name} (${r} — ${c.score})\n`;
       }
     });
@@ -148,14 +148,15 @@ export function generateManifest(
     const c = cullResults[i]; if (!c) return;
     const d = deepResults[i];
     const override = ratingOverrides[i];
-    const aiRating = d?.rating ?? c.rating;
+    const aiRating = c.rating;
     const finalRating = override ?? aiRating;
     t += `${p.name}\n` + "-".repeat(40) + "\n";
     if (override && override !== aiRating) {
-      t += `Rating: ${finalRating} (human override; AI rated ${aiRating}) | Overall: ${c.score}/100\n`;
+      t += `Rating: ${finalRating} (human override; AI rated ${aiRating}) | Cull Score: ${c.score}/100\n`;
     } else {
-      t += `Rating: ${finalRating} | Overall: ${c.score}/100\n`;
+      t += `Rating: ${finalRating} | Cull Score: ${c.score}/100\n`;
     }
+    if (d) t += `Editor's Score: ${d.score}/100 | Editor's Rating: ${d.rating}\n`;
     if (d?.scores) t += `Impact: ${d.scores.impact} | Composition: ${d.scores.composition} | Raw Quality: ${d.scores.rawQuality} | Craft: ${d.scores.craftExecution} | Story: ${d.scores.story}\n`;
     if (d?.title) t += `Title: ${d.title}\n`;
     if (d?.editorialRole) t += `Editorial Role: ${d.editorialRole}\n`;

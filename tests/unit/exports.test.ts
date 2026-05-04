@@ -48,11 +48,27 @@ test("generateXMP escapes XML and records human overrides", () => {
   assert.match(xmp, /HumanOverride/);
 });
 
+test("generateXMP keeps cull score primary when editor notes exist", () => {
+  const xmp = generateXMP(photo.name, cull, deep);
+
+  assert.match(xmp, /xmp:Rating="4"/);
+  assert.match(xmp, /Warm &lt;Light&gt; &amp; Waiting/);
+  assert.match(xmp, /Score:72/);
+});
+
 test("generateOrgScript sorts by effective rating when an override exists", () => {
   const script = generateOrgScript([photo], { 0: cull }, {}, null, "unix", false, { 0: "CUT" });
 
   assert.match(script.content, /mkdir -p "organized\/by_rating\/04_cuts"/);
   assert.match(script.content, /cp "DSC_0001.JPG" "organized\/by_rating\/04_cuts\/DSC_0001.JPG"/);
+});
+
+test("generateOrgScript keeps cull rating primary when editor notes differ", () => {
+  const script = generateOrgScript([photo], { 0: cull }, { 0: deep }, null, "unix");
+
+  assert.match(script.content, /mkdir -p "organized\/by_rating\/02_selects"/);
+  assert.match(script.content, /cp "DSC_0001.JPG" "organized\/by_rating\/02_selects\/DSC_0001.JPG"/);
+  assert.doesNotMatch(script.content, /organized\/by_rating\/01_heroes/);
 });
 
 test("generateManifest shows the AI rating when a human override differs", () => {
@@ -71,6 +87,9 @@ test("generateManifest includes editor notes fields for deep results", () => {
   );
 
   assert.match(manifest, /EDITOR'S NOTES/);
+  assert.match(manifest, /1\. DSC_0001\.JPG \(SELECT — 72\)/);
+  assert.match(manifest, /Rating: SELECT \| Cull Score: 72\/100/);
+  assert.match(manifest, /Editor's Score: 88\/100/);
   assert.match(manifest, /Editorial Role: anchor/);
   assert.match(manifest, /Edit Direction: Hold the simple graphic read; deepen contrast while keeping the red field clean\./);
   assert.match(manifest, /Crop \/ Composition: Keep the centered geometry; avoid cropping tighter\./);

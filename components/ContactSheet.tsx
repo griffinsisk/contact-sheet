@@ -636,11 +636,11 @@ export default function ContactSheet() {
 
   const showToolbar = photos.length > 0 && phase !== "empty" && phase !== "uploading" && phase !== "ready";
   const isRestoredSession = photos.length > 0 && photos.every(p => p.isRestored);
-  // Effective rating = override > deep > cull
+  // Effective rating = override > cull. Editor notes are secondary metadata.
   const getEffectiveRating = (index: number) => {
     if (ratingOverrides[index]) return ratingOverrides[index];
-    if (deepResults[index]) return deepResults[index].rating;
     if (cullResults[index]) return cullResults[index].rating;
+    if (deepResults[index]) return deepResults[index].rating;
     return null;
   };
   const heroCount = photos.reduce((n, _, i) => n + (getEffectiveRating(i) === "HERO" ? 1 : 0), 0);
@@ -649,8 +649,8 @@ export default function ContactSheet() {
   // ── Sort & filter ──────────────────────────────────────────────────────
 
   const getScore = (index: number) => {
-    if (deepResults[index]) return deepResults[index].score;
     if (cullResults[index]) return cullResults[index].score;
+    if (deepResults[index]) return deepResults[index].score;
     return 0;
   };
 

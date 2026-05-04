@@ -121,7 +121,7 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
   const [resTestLoading, setResTestLoading] = useState(false);
   if (!photo) return null;
 
-  const analysis = deep || cull;
+  const analysis = cull || deep;
   const editorialRole = formatEditorialRole(deep?.editorialRole);
   const hasCullScoreBreakdown = !!cull && (
     cull.rubricScore !== undefined
@@ -197,18 +197,16 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
           )}
         </div>
 
-        {/* Title + Score */}
+        {/* Title + primary cull score */}
         {analysis && (
-          <div className={`${deep ? "mb-8" : "flex justify-between items-baseline mb-8"}`}>
-            <h1 className={`font-headline italic text-3xl text-on-surface leading-tight ${deep ? "" : "pr-4"}`}>
+          <div className="flex justify-between items-baseline mb-8">
+            <h1 className="font-headline italic text-3xl text-on-surface leading-tight pr-4">
               {deep?.title || photo.name.replace(/\.[^.]+$/, "")}
             </h1>
-            {!deep && (
-              <div className="text-right flex-shrink-0">
-                <span className="block font-label text-[10px] text-on-surface-variant">FINAL SCORE</span>
-                <span className="font-label text-5xl font-black text-primary">{analysis.score}</span>
-              </div>
-            )}
+            <div className="text-right flex-shrink-0">
+              <span className="block font-label text-[10px] text-on-surface-variant">FINAL SCORE</span>
+              <span className="font-label text-5xl font-black text-primary">{analysis.score}</span>
+            </div>
           </div>
         )}
 
@@ -358,7 +356,7 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
             </section>
             <section>
               <h3 className="font-label text-[11px] text-on-surface-variant border-l-2 border-primary/40 pl-3 mb-4 uppercase tracking-widest">
-                TECHNICAL & COMPOSITION
+                TECHNICAL QUALITY
               </h3>
               <p className="font-body text-sm text-on-surface/80 leading-relaxed">
                 {deep.technical}

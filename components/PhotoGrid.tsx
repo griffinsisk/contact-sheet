@@ -51,8 +51,8 @@ export default function PhotoGrid({
         const photo = photos[index];
         const cull = cullResults[index];
         const deep = deepResults[index];
-        const analysis = deep || cull;
-        const rating = ratingOverrides[index] || analysis?.rating;
+        const analysis = cull || deep;
+        const rating = ratingOverrides[index] || cull?.rating || deep?.rating;
         const isOverridden = !!ratingOverrides[index];
         const ratingStyle = rating ? RATING_CLASSES[rating] : null;
         const isSelected = selectedIndex === index;
@@ -73,7 +73,7 @@ export default function PhotoGrid({
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(index); } }}
               tabIndex={0}
               role="button"
-              aria-label={`${photo.name}${analysis ? `, ${analysis.rating}, score ${analysis.score}` : ""}`}
+              aria-label={`${photo.name}${analysis && rating ? `, ${rating}, score ${analysis.score}` : ""}`}
               className={`relative aspect-square bg-surface-lowest overflow-hidden cursor-pointer transition-all duration-200 ${
                 isSelected ? "outline outline-2 outline-primary" : isCompare ? "outline outline-2 outline-primary" : ""
               }`}

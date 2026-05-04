@@ -107,7 +107,7 @@ test.beforeEach(async ({ page }) => {
           analysis: [
             {
               index: 0,
-              rating: "SELECT",
+              rating: "HERO",
               score: 76,
               scores: { impact: 76, composition: 74, rawQuality: 82, craftExecution: 72, story: 70 },
               title: "Red Study",
@@ -209,13 +209,18 @@ test("develop shortlist shows editor notes and secondary score", async ({ page }
   await expect(page.getByText("Editor's Notes")).toBeVisible();
   await expect(page.getByText("The shortlist reads strongest as a quiet graphic sequence.")).toBeVisible();
 
-  await page.getByRole("button", { name: /red-dot\.png, SELECT, score 76/ }).click();
+  await page.getByRole("button", { name: /red-dot\.png, SELECT, score 72/ }).click();
+  const panel = page.locator("aside");
+  await expect(panel.getByText("FINAL SCORE")).toBeVisible();
+  await expect(panel.getByText("72", { exact: true })).toBeVisible();
   await expect(page.getByText("ANCHOR", { exact: true })).toBeVisible();
   await expect(page.getByText("EDIT DIRECTION")).toBeVisible();
   await expect(page.getByText("Hold the simple graphic read; deepen contrast while keeping the red field clean.")).toBeVisible();
   await expect(page.getByText("CROP / COMPOSITION")).toBeVisible();
   await expect(page.getByText("Keep the centered geometry; avoid cropping tighter.")).toBeVisible();
-  await expect(page.getByText("EDITOR'S SCORE")).toBeVisible();
+  await expect(panel.getByText("TECHNICAL QUALITY")).toBeVisible();
+  await expect(panel.getByText("EDITOR'S SCORE")).toBeVisible();
+  await expect(panel.getByText("76", { exact: true })).toBeVisible();
 });
 
 test("reverting a correction back to the AI rating removes the override signal", async ({ page }) => {
