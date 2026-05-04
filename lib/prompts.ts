@@ -51,29 +51,45 @@ const INTENT_CRAFT_RULES: Record<IntentPreset, string> = {
 - When a frame's apparent intent is unclear, grade CRAFT on whether the photographer seemed to land whatever they were attempting.`,
 };
 
-function tasteSection(profile?: { prose: string; aestheticTags: string[] } | null): string {
+function tasteSection(
+  profile?: { prose: string; aestheticTags: string[] } | null,
+  mode: "cull" | "deep" = "cull",
+): string {
   if (!profile || profile.aestheticTags.length === 0) return "";
   const tags = profile.aestheticTags.join(", ");
+  if (mode === "deep") {
+    return `\nPHOTOGRAPHER TASTE (your library reflects your aesthetic preferences):
+Tags: ${tags}
+Prose: "${profile.prose}"
+
+Use this profile as style context for the review, but keep the rubric honest:
+- Alignment may shape how you discuss style, mood, and visual intent.
+- Do not let profile alignment rescue weak STORY or CRAFT fundamentals.
+- If you mention fit with the photographer's library, name the specific visible trait.\n`;
+  }
+
   return `\nPHOTOGRAPHER TASTE (your library reflects your aesthetic preferences):
 Tags: ${tags}
 Prose: "${profile.prose}"
 
-This profile is a soft bias on how you read this frame:
-- A frame that aligns with the photographer's library traits reads as more in their style. Let it nudge IMPACT or COMPOSITION recognition modestly when the rubric supports it. Do NOT use alignment to bypass the STORY GUARDRAIL — warm intimate light on a frame with no decisive moment is still mood, not story, regardless of taste fit.
-- A frame that diverges from those traits is fine to score on its own merits. Do not punish divergence; the rubric's CRAFT GUARDRAIL handles intentional craft choices on its own.
-- Profile influence ceiling: profile-driven adjustment on the overall score MUST NOT exceed ±7 points. Before finalizing each frame's score, run this self-check: "If I removed the profile context entirely and graded only against the rubric, would my score change by more than 7 points?" If yes, you are over-applying profile — re-score using rubric criteria alone, then apply at most ±7 points of taste-driven adjustment.
-- Bucket crossings via profile are allowed ONLY when the rubric-alone score is already near the bucket boundary (within ~5 points of 50, 70, or 85). Examples:
-    OK: rubric-alone 84 SELECT + strong alignment → HERO 86 (near-boundary, +2)
-    OK: rubric-alone 67 MAYBE + alignment → SELECT 71 (near-boundary, +4)
-    NOT OK: rubric-alone 52 MAYBE + alignment → SELECT 78 (+26, far from boundary, exceeds cap)
-    NOT OK: rubric-alone 78 SELECT + divergence → MAYBE 60 (-18, exceeds cap)
-- Per-dimension caps: profile-driven lift on any single dimension (IMPACT, COMPOSITION, STORY) MUST NOT exceed +10 points. STORY in particular: if the frame has no decisive moment per the STORY GUARDRAIL (no clear subject doing something, no gesture, no visible relationship), profile alignment CANNOT push STORY above 50, regardless of palette match. Warm intimate light + person at rest = mood, not story; STORY stays ≤45 even with strong taste fit.
+Do NOT bake photographer taste into "score", "rating", or dimension scores. Those fields must remain the generic rubric result. Instead, fill "profileAffinity" so application code can apply a bounded, inspectable adjustment after this response.
 
-REQUIRED — every cull note when a profile is present must CLOSE with one of these three lines acknowledging profile influence:
+Profile affinity definitions:
+- "aligned": visible traits in the frame clearly match the library's tags/prose.
+- "diverged": visible traits directly conflict with strong library traits or correction-derived direction.
+- "outside": the frame does not strongly match or contradict the profile.
+
+For suggestedDelta:
+- Propose small axis-level nudges only for IMPACT, COMPOSITION, and STORY.
+- Use positive numbers for aligned traits and negative numbers for diverged traits.
+- Each axis suggestion must stay between -10 and +10.
+- Never suggest a STORY lift for mood, palette, or subject preference when the STORY GUARDRAIL says there is no decisive moment.
+
+REQUIRED - every cull note when a profile is present must CLOSE with one of these three lines, and the line must match profileAffinity.alignment:
   - "Aligns with your library — [specific trait, e.g., 'warm intimate light matches your golden-hour preference']."
   - "Diverges from your library — [specific divergence, e.g., 'your library leans tack-sharp wildlife; this motion-blurred candid reads as off-style']."
   - "Outside your library's strong traits, scored on standalone merits."
-The cull note's primary content (what's actually in the frame, what works or doesn't) MUST come first. The profile-influence line is the CLOSING sentence — context, not headline. Never lead with profile divergence.
+The cull note's primary content (what's actually in the frame, what works or doesn't) MUST come first. The profile-influence line is the CLOSING sentence - context, not headline. Never lead with profile divergence.
 
 Session intent still governs CRAFT thresholds.\n`;
 }
@@ -170,7 +186,14 @@ const CULL_JSON_TAIL = `Respond ONLY with valid JSON (no markdown, no backticks,
       "score": 72,
       "rating": "SELECT",
       "scores": { "impact": 70, "composition": 78, "rawQuality": 82, "craftExecution": 75, "story": 65 },
-      "reason": "One concise sentence — what makes this a keeper or a cut. When CRAFT is reduced, name the specific issue (missed focus, motion blur on subject, camera shake, flat framing). When STORY is reduced, say what the frame is missing (no decisive moment, no subject doing anything, mood only). Don't be generic — point to what's actually in the frame."
+      "profileAffinity": {
+        "alignment": "aligned",
+        "confidence": 0.82,
+        "matchedTraits": ["warm tones", "tight crop"],
+        "contradictedTraits": [],
+        "suggestedDelta": { "impact": 4, "composition": 2, "story": 0 }
+      },
+      "reason": "One concise sentence — what makes this a keeper or a cut. When CRAFT is reduced, name the specific issue (missed focus, motion blur on subject, camera shake, flat framing). When STORY is reduced, say what the frame is missing (no decisive moment, no subject doing anything, mood only). Don't be generic — point to what's actually in the frame. If no photographer taste profile is supplied, set profileAffinity.alignment to outside with confidence 0 and empty trait arrays."
     }
   ]
 }`;
@@ -179,7 +202,7 @@ export function buildCullPrompt(
   intent: SessionIntent | null,
   profile?: { prose: string; aestheticTags: string[] } | null,
 ): string {
-  return `${CULL_BASE}\n${tasteSection(profile)}${intentSection(intent)}\n${RUBRIC_BODY}\n\n${CULL_JSON_TAIL}`;
+  return `${CULL_BASE}\n${tasteSection(profile, "cull")}${intentSection(intent)}\n${RUBRIC_BODY}\n\n${CULL_JSON_TAIL}`;
 }
 
 /** Legacy export — callers that don't plumb intent get the mixed/per-frame fallback. */
@@ -226,7 +249,7 @@ export function buildDeepReviewPrompt(
   intent: SessionIntent | null,
   profile?: { prose: string; aestheticTags: string[] } | null,
 ): string {
-  return `${DEEP_BASE}\n${tasteSection(profile)}${intentSection(intent)}\n${RUBRIC_BODY}\n\n${DEEP_JSON_TAIL}`;
+  return `${DEEP_BASE}\n${tasteSection(profile, "deep")}${intentSection(intent)}\n${RUBRIC_BODY}\n\n${DEEP_JSON_TAIL}`;
 }
 
 /** Legacy export — callers that don't plumb intent get the mixed fallback. */

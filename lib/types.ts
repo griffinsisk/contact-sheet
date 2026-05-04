@@ -86,11 +86,33 @@ export interface DimensionScores {
   story: number;
 }
 
+export type ProfileAlignment = "aligned" | "diverged" | "outside";
+
+export interface ProfileAffinity {
+  alignment: ProfileAlignment;
+  confidence: number;
+  matchedTraits: string[];
+  contradictedTraits: string[];
+  suggestedDelta: {
+    impact?: number;
+    composition?: number;
+    story?: number;
+  };
+}
+
 export interface CullResult {
   index: number;
+  /** Final score after deterministic rubric math and profile-aware post-processing. */
   score: number;
   rating: Rating;
   scores?: DimensionScores;
+  /** Weighted score from the five rubric dimensions, before profile adjustment. */
+  rubricScore?: number;
+  /** Signed app-side profile adjustment applied to rubricScore. */
+  profileDelta?: number;
+  /** Explicit final score mirror for inspectability; score remains the legacy field. */
+  finalScore?: number;
+  profileAffinity?: ProfileAffinity;
   reason: string;
 }
 

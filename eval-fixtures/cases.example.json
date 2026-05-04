@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "pretty-subject-low-story",
+      "file": "photos/flower-study.jpg",
+      "intent": { "preset": "mixed" },
+      "profile": {
+        "prose": "You favor warm color, close subject studies, and simple botanical detail.",
+        "aestheticTags": ["warm_tones", "close_subject", "botanical_detail"]
+      },
+      "expected": {
+        "allowedRatings": ["MAYBE", "SELECT"],
+        "scoreRange": [48, 68],
+        "rubricScoreRange": [45, 65],
+        "profileDeltaRange": [0, 6],
+        "profileAlignment": ["aligned", "outside"],
+        "dimensionRanges": {
+          "story": [25, 50]
+        },
+        "mustMention": ["flower"],
+        "mustNotMention": ["diverges from your library"]
+      }
+    },
+    {
+      "id": "technically-fine-no-moment",
+      "file": "photos/flat-scene.jpg",
+      "intent": { "preset": "mixed" },
+      "expected": {
+        "allowedRatings": ["CUT", "MAYBE"],
+        "scoreRange": [30, 58],
+        "dimensionRanges": {
+          "story": [0, 45],
+          "rawQuality": [55, 95]
+        },
+        "mustNotMention": ["portfolio-worthy"]
+      }
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 ---
 
-## Status: draft (2026-05-03)
+## Status: implementation mostly complete locally; validation pending (updated 2026-05-04)
 
 Phase D consolidated star and correction signals into the taste-profile regen loop, producing one prose+tags injection per cull. During Phase D smoke testing, a duplicate red flower photo (seeded into the library, then included in a fresh cull) was scored 52 / MAYBE with a cull note saying "diverges from your library" — about a frame literally in the library.
 
@@ -125,20 +125,31 @@ Cross-check incoming photo hashes against `cs-taste-library` entries. For matche
 
 ---
 
-## Implementation outline
+## Implementation status
 
 | Task | Touchpoints | Size |
 |---|---|---|
-| Update CULL_PROMPT to request `profileAffinity` per frame | `lib/prompts.ts` | M |
-| Extend `CullResult` and `CullResponse` types | `lib/types.ts` | S |
-| Update JSON schema validation in `parseJSON` for new shape | `lib/providers.ts` or wherever it lives | S |
-| Implement bounded-math layer | new `lib/profile-scoring.ts` | M |
-| Wire post-process step in `runCull` after model returns | `lib/api.ts` | S |
-| Update DetailPanel to show rubric / delta / final / matched traits | `components/DetailPanel.tsx` | M |
-| Library-membership sanity check | `app/api/cull/route.ts` (server-side, can read hashes from extraBody) | S |
-| Validation cull on wildlife base set, compare scores against Phase D baseline | manual + `docs/PHASE-E-TEST-RESULTS.md` | M |
+| Extract deterministic score helpers | `lib/scoring.ts`, `tests/unit/scoring.test.ts` | Done |
+| Implement bounded-math layer | `lib/profile-scoring.ts`, `tests/unit/profile-scoring.test.ts` | Done |
+| Update CULL_PROMPT to request `profileAffinity` per frame | `lib/prompts.ts` | Done |
+| Extend `CullResult` and `CullResponse` types | `lib/types.ts` | Done |
+| Update JSON/fallback behavior for new shape | `lib/profile-scoring.ts`, `lib/api.ts` | Done |
+| Wire post-process step in `runCull` after model returns | `lib/api.ts` | Done |
+| Update DetailPanel to show rubric / delta / final / matched traits | `components/DetailPanel.tsx` | Done |
+| Library-membership sanity check | `components/ContactSheet.tsx`, `components/SeedUploadModal.tsx`, `lib/api.ts`, `tests/e2e/contact-sheet-smoke.spec.ts` | Done |
+| Add `eval:ai` once scoring contract exists | `scripts/eval-ai.ts`, `package.json`, `eval-fixtures/` | Scaffold done; real fixtures pending |
+| Validation cull on wildlife base set, compare scores against Phase D baseline | manual + `docs/PHASE-E-TEST-RESULTS.md` | Pending |
 
-Estimated total: ~2–3 days of implementation + a deliberate validation pass. Larger scope than Phase D, smaller than Phase B.
+Current build status:
+
+- Deterministic scoring helpers and unit tests are implemented.
+- Profile-aware bounded math and unit tests are implemented.
+- Cull prompt/types/API post-processing and DetailPanel breakdown are implemented.
+- `npm run eval:ai` is implemented and opt-in. It requires local real-photo fixtures in `eval-fixtures/cases.json`; generated reports are ignored under `eval-results/`.
+- First paid live eval passed with 8/8 cases on 2026-05-04; results captured in `docs/PHASE-E-TEST-RESULTS.md`.
+- Last verification: `npm run typecheck` passed, `npm run test:unit` passed with 21 tests, `npm run test:e2e` passed with 5 tests, `npm run eval:ai -- --help` passed, `npm run eval:ai` passed with 8/8 live cases.
+
+Remaining work: run a manual validation cull on the wildlife base set and capture observations in `docs/PHASE-E-TEST-RESULTS.md`.
 
 ---
 
@@ -173,6 +184,8 @@ That's the promise the profile mechanism implicitly makes today and currently fa
 
 ---
 
-## When to start
+## Next validation steps
 
-Phase D needs to merge first (PR #3). Smoke test that, capture results, then decide whether to start Phase E. The codex-feedback doc and this plan are the design — happy to keep both in the parking lot until the right moment.
+1. Run a manual wildlife/base-set cull and capture results in `docs/PHASE-E-TEST-RESULTS.md`.
+2. Tune profile delta bounds only if validation shows consistent over- or under-application.
+3. Run final `npm run typecheck` and `npm test` before PR.

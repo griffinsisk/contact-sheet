@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import sharp from "sharp";
 
 const RED_DOT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
@@ -9,6 +10,29 @@ const BLUE_DOT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAwUBAUl8n7sAAAAASUVORK5CYII=",
   "base64",
 );
+
+async function makeFixturePng(seed: number): Promise<Buffer> {
+  const width = 32;
+  const height = 24;
+  const data = Buffer.alloc(width * height * 3);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 3;
+      data[i] = (seed * 31 + x * 7 + y * 3) % 256;
+      data[i + 1] = (seed * 47 + x * 2 + y * 11) % 256;
+      data[i + 2] = (seed * 59 + x * 13 + y * 5) % 256;
+    }
+  }
+  return sharp(data, { raw: { width, height, channels: 3 } }).png().toBuffer();
+}
+
+async function makeTasteSeedFiles() {
+  return Promise.all(Array.from({ length: 8 }, async (_, i) => ({
+    name: `seed-${i}.png`,
+    mimeType: "image/png",
+    buffer: await makeFixturePng(i),
+  })));
+}
 
 async function uploadAndCullTwoPhotos(page: import("@playwright/test").Page) {
   await page.goto("/");
@@ -26,7 +50,7 @@ async function uploadAndCullTwoPhotos(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: /START CULL/i }).click();
 
   await expect(page.getByRole("button", { name: /red-dot\.png, SELECT, score 72/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /blue-dot\.png, CUT, score 48/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /blue-dot\.png, CUT, score 46/ })).toBeVisible();
 }
 
 async function overrideEntryCount(page: import("@playwright/test").Page): Promise<number> {
@@ -107,10 +131,51 @@ test("cull, correction, and star signals are persisted with mocked APIs", async 
   }).toBe(1);
 });
 
+test("seeded favorite duplicates are recognized during cull scoring", async ({ page }) => {
+  const seedFiles = await makeTasteSeedFiles();
+  const now = Date.now();
+
+  await page.route("**/api/taste-profile", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        prose: "You favor textured gradients with warm atmospheric color.",
+        aestheticTags: ["warm_tones", "textured_color", "atmospheric"],
+        coherence: "high",
+        generatedAt: now,
+      }),
+    });
+  });
+
+  await page.goto("/");
+
+  const seedChooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Upload Favorites" }).click();
+  await page.getByRole("region", { name: "Drop favorites here" }).click();
+  const seedChooser = await seedChooserPromise;
+  await seedChooser.setFiles(seedFiles);
+
+  await expect(page.getByText("8 / 8–20")).toBeVisible();
+  await page.getByRole("button", { name: "ADD TO LIBRARY" }).click();
+  await expect(page.getByText("Taste profile ready")).toBeVisible();
+  await page.getByRole("button", { name: "DONE" }).click();
+
+  const cullChooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Pick Files" }).click();
+  const cullChooser = await cullChooserPromise;
+  await cullChooser.setFiles([seedFiles[0]]);
+
+  await expect(page.getByText("1 photo loaded")).toBeVisible();
+  await page.getByRole("button", { name: /Mixed/ }).click();
+  await page.getByRole("button", { name: /START CULL/i }).click();
+
+  await expect(page.getByRole("button", { name: /seed-0\.png, SELECT, score 74/ })).toBeVisible();
+});
+
 test("reverting a correction back to the AI rating removes the override signal", async ({ page }) => {
   await uploadAndCullTwoPhotos(page);
 
-  await page.getByRole("button", { name: /blue-dot\.png, CUT, score 48/ }).click();
+  await page.getByRole("button", { name: /blue-dot\.png, CUT, score 46/ }).click();
   await page.getByRole("button", { name: "Rate as MAYBE" }).click();
 
   await expect(page.getByText("Correction saved")).toBeVisible();
@@ -139,7 +204,7 @@ test("correction toast distinguishes first fire, subsequent fire, and undo", asy
   await page.getByRole("button", { name: "Dismiss" }).click();
   await expect(page.getByText("Correction saved")).toHaveCount(0);
 
-  await page.getByRole("button", { name: /blue-dot\.png, CUT, score 48/ }).click();
+  await page.getByRole("button", { name: /blue-dot\.png, CUT, score 46/ }).click();
   await page.getByRole("button", { name: "Rate as MAYBE" }).click();
 
   await expect(page.getByText("Correction saved")).toBeVisible();

@@ -281,7 +281,11 @@ export default function ContactSheet() {
         ? { preset: intentPreset, freeForm: intentFreeForm.trim() || undefined }
         : { preset: "mixed" as IntentPreset };
       const profile = !ignoreTasteProfile && tasteLibrary.currentProfile
-        ? { prose: tasteLibrary.currentProfile.prose, aestheticTags: tasteLibrary.currentProfile.aestheticTags }
+        ? {
+            prose: tasteLibrary.currentProfile.prose,
+            aestheticTags: tasteLibrary.currentProfile.aestheticTags,
+            libraryPhotoHashes: tasteLibrary.entries.map(e => e.photoHash),
+          }
         : null;
       const results = await runCull(target, config, effectiveIntent, (msg, batch, total) => {
         setProgressMsg(msg);
@@ -311,7 +315,7 @@ export default function ContactSheet() {
       setPhase(Object.keys(cullResults).length > 0 ? "culled" : "empty");
       setProgressMsg("");
     }
-  }, [config, photos, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, ignoreTasteProfile, maybeAutoRegenProfile]);
+  }, [config, photos, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, tasteLibrary.entries, ignoreTasteProfile, maybeAutoRegenProfile]);
 
   // ── Deep review ─────────────────────────────────────────────────────────
 
