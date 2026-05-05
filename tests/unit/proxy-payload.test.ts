@@ -43,7 +43,9 @@ test("generateTasteProfile trims favorite entries before posting an oversized pr
   const originalFetch = globalThis.fetch;
   const bigImage = "a".repeat(250_000);
   const library: TasteLibrary = {
-    version: 1,
+    version: 2,
+    id: "profile-a",
+    name: "My Profile",
     entries: Array.from({ length: 40 }, (_, i) => ({
       photoHash: `hash-${i}`,
       addedAt: i,
