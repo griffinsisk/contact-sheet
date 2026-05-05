@@ -151,6 +151,66 @@ test("creates and switches local taste profiles", async ({ page }) => {
   expect(state.activeId).toBe(state.libraries[1].id);
 });
 
+test("cull uses the selected active taste profile", async ({ page }) => {
+  const requests: any[] = [];
+  await page.unroute("**/api/cull");
+  await page.route("**/api/cull", async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        text: JSON.stringify({
+          cull: [{
+            index: 0,
+            score: 72,
+            rating: "SELECT",
+            scores: { impact: 74, composition: 72, rawQuality: 80, craftExecution: 70, story: 62 },
+            reason: "Profile-aware test result.",
+          }],
+        }),
+        truncated: false,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.evaluate(() => {
+    window.localStorage.setItem("cs-taste-libraries", JSON.stringify({
+      version: 2,
+      activeId: "wedding",
+      updatedAt: Date.now(),
+      libraries: [
+        {
+          version: 2,
+          id: "wedding",
+          name: "Wedding",
+          entries: [],
+          currentProfile: { prose: "soft ceremony emotion", aestheticTags: ["soft"], generatedAt: 1, generatedFromEntryCount: 8 },
+        },
+        {
+          version: 2,
+          id: "street",
+          name: "Street",
+          entries: [],
+          currentProfile: { prose: "hard light public moments", aestheticTags: ["hard_light"], generatedAt: 2, generatedFromEntryCount: 8 },
+        },
+      ],
+    }));
+  });
+  await page.reload();
+
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Pick Files" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles([{ name: "red-dot.png", mimeType: "image/png", buffer: RED_DOT_PNG }]);
+
+  await page.getByRole("button", { name: /Mixed/ }).click();
+  await page.getByLabel("Taste profile", { exact: true }).selectOption("street");
+  await page.getByRole("button", { name: /START CULL/i }).click();
+
+  await expect.poll(() => Promise.resolve(requests[0]?.profile?.prose)).toBe("hard light public moments");
+});
+
 test("cull, correction, and star signals are persisted with mocked APIs", async ({ page }) => {
   await uploadAndCullTwoPhotos(page);
 
@@ -174,10 +234,11 @@ test("cull, correction, and star signals are persisted with mocked APIs", async 
 
   await expect.poll(async () => {
     return page.evaluate(() => {
-      const raw = window.localStorage.getItem("cs-taste-library");
+      const raw = window.localStorage.getItem("cs-taste-libraries");
       if (!raw) return 0;
       const parsed = JSON.parse(raw);
-      return parsed.entries?.length ?? 0;
+      const active = parsed.libraries.find((library: { id: string }) => library.id === parsed.activeId) ?? parsed.libraries[0];
+      return active?.entries?.length ?? 0;
     });
   }).toBe(1);
 });
