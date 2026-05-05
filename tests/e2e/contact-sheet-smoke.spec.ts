@@ -229,6 +229,15 @@ test("cull, correction, and star signals are persisted with mocked APIs", async 
     });
   }).toBe("Minimal red color field, centered composition, no visible subject or story");
 
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const raw = window.localStorage.getItem("cs-overrides");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed.entries?.[0]?.profileIdAtCull || null;
+    });
+  }).not.toBeNull();
+
   await page.getByLabel("Add to taste library").first().click();
   await expect(page.getByText("Saved to library")).toBeVisible();
 

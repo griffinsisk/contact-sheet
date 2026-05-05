@@ -554,6 +554,7 @@ export default function ContactSheet() {
         originalRating: cull.rating,
         userRating: rating,
         timestamp: Date.now(),
+        profileIdAtCull: activeTasteProfileId,
       };
       addOverride(baseEntry);
 
@@ -587,7 +588,7 @@ export default function ContactSheet() {
         // out at regen time, so the correction is silent until the call returns
       }
     }).catch(() => { /* hash failure shouldn't block UI override */ });
-  }, [cullResults, photos, intentPreset, addOverride, removeOverride, ratingOverrides]);
+  }, [activeTasteProfileId, cullResults, photos, intentPreset, addOverride, removeOverride, ratingOverrides]);
 
   // ── Main area drag-and-drop ──────────────────────────────────────────────
 

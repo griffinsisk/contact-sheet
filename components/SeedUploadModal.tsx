@@ -135,7 +135,9 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
   }, [acceptFiles]);
 
   const { store: overridesStore, remove: removeOverride } = useOverrides();
-  const correctionEntries = [...overridesStore.entries].sort((a, b) => b.timestamp - a.timestamp);
+  const correctionEntries = [...overridesStore.entries]
+    .filter((entry) => entry.profileIdAtCull === library.id)
+    .sort((a, b) => b.timestamp - a.timestamp);
   const correctionSignalCount = correctionEntries.filter((e) => e.shortDescription.trim().length > 0).length;
   // Corrections added/changed after the last profile regen still need a fresh
   // regen to actually shape the AI's read. Surface that pending state honestly.

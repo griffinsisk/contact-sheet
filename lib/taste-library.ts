@@ -1,5 +1,6 @@
 import type { Rating } from "./types";
 import type { OverrideEntry } from "./overrides";
+import { correctionsForProfile } from "./overrides";
 import { PROXY_PAYLOAD_SOFT_LIMIT_BYTES, estimateProxyBodyBytes } from "./proxy-payload";
 
 export interface TasteEntry {
@@ -216,6 +217,23 @@ export function getTasteLibraryCollectionClient(): TasteLibraryCollection {
       if (legacy.version === 1 && Array.isArray(legacy.entries)) {
         const migrated = migrateLegacyLibrary(legacy);
         localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(migrated));
+        try {
+          const rawOverrides = localStorage.getItem("cs-overrides");
+          if (rawOverrides && migrated.activeId) {
+            const parsed = JSON.parse(rawOverrides) as { version: 1; entries?: Array<{ profileIdAtCull?: string | null }> };
+            if (parsed.version === 1 && Array.isArray(parsed.entries)) {
+              const scoped = {
+                ...parsed,
+                entries: parsed.entries.map((entry) =>
+                  entry.profileIdAtCull === undefined ? { ...entry, profileIdAtCull: migrated.activeId } : entry
+                ),
+              };
+              localStorage.setItem("cs-overrides", JSON.stringify(scoped));
+            }
+          }
+        } catch {
+          // Ignore override migration failures; the taste library migration still succeeds.
+        }
         localStorage.removeItem(STORAGE_KEY_V1);
         return migrated;
       }
@@ -274,7 +292,8 @@ export async function generateTasteProfile(
   }
   // Only ship corrections that have a description (others were just hashed and
   // their describe call hadn't returned yet).
-  const usableCorrections = (corrections ?? []).filter((c) => c.shortDescription.trim().length > 0);
+  const scopedCorrections = correctionsForProfile(corrections ?? [], library.id);
+  const usableCorrections = scopedCorrections.filter((c) => c.shortDescription.trim().length > 0);
   let requestEntries = usable.slice(0, PROFILE_REQUEST_ENTRY_LIMIT);
   const buildPayload = (entries: TasteEntry[]) => ({
     entries: entries.map((e) => ({ photoHash: e.photoHash, image: e.image! })),
