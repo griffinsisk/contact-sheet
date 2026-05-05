@@ -126,6 +126,9 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
   const pendingCorrectionCount = correctionEntries.filter(
     (e) => e.shortDescription.trim().length > 0 && e.timestamp > lastRegenAt,
   ).length;
+  const pendingFavoriteCount = library.entries.filter(
+    (e) => !!e.image && e.addedAt > lastRegenAt,
+  ).length;
 
   const runProfileGeneration = useCallback(async () => {
     if (!isPro) {
@@ -477,40 +480,57 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
                         </div>
                         <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">
                           {usable.length} {usable.length === 1 ? "image" : "images"} · removing one drops it from the next regen
+                          {pendingFavoriteCount > 0 && (
+                            <span className="text-primary">
+                              {" · "}{pendingFavoriteCount} {pendingFavoriteCount === 1 ? "favorite" : "favorites"} pending — regen to apply
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                         {[...usable]
                           .sort((a, b) => b.addedAt - a.addedAt)
-                          .map((entry) => (
-                            <div
-                              key={entry.photoHash}
-                              className="relative group aspect-square bg-surface-low overflow-hidden"
-                            >
-                              <img
-                                src={`data:image/jpeg;base64,${entry.image}`}
-                                alt=""
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
-                              <button
-                                onClick={() => toggleFavorite(entry)}
-                                aria-label="Remove from library"
-                                title="Remove from library"
-                                className="absolute top-1 right-1 p-1 bg-background/80 text-on-surface-variant hover:text-error hover:bg-background transition-colors opacity-0 group-hover:opacity-100"
+                          .map((entry) => {
+                            const isPending = entry.addedAt > lastRegenAt;
+                            return (
+                              <div
+                                key={entry.photoHash}
+                                className="relative group aspect-square bg-surface-low overflow-hidden"
                               >
-                                <span className="material-symbols-outlined text-[14px]">delete</span>
-                              </button>
-                              {entry.rescued && (
-                                <span
-                                  className="absolute bottom-1 left-1 px-1 py-0.5 bg-primary/90 text-on-primary font-label text-[8px] uppercase tracking-widest"
-                                  title="Rescued from CUT"
+                                <img
+                                  src={`data:image/jpeg;base64,${entry.image}`}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                                <button
+                                  onClick={() => toggleFavorite(entry)}
+                                  aria-label="Remove from library"
+                                  title="Remove from library"
+                                  className="absolute top-1 right-1 p-1 bg-background/80 text-on-surface-variant hover:text-error hover:bg-background transition-colors opacity-0 group-hover:opacity-100"
                                 >
-                                  Rescued
-                                </span>
-                              )}
-                            </div>
-                          ))}
+                                  <span className="material-symbols-outlined text-[14px]">delete</span>
+                                </button>
+                                {isPending && (
+                                  <span
+                                    aria-label="Pending profile regen"
+                                    title="Pending profile regen"
+                                    className="absolute top-1 left-1 w-6 h-6 bg-primary/90 text-on-primary flex items-center justify-center"
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">sync</span>
+                                  </span>
+                                )}
+                                {entry.rescued && (
+                                  <span
+                                    className="absolute bottom-1 left-1 px-1 py-0.5 bg-primary/90 text-on-primary font-label text-[8px] uppercase tracking-widest"
+                                    title="Rescued from CUT"
+                                  >
+                                    Rescued
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   );

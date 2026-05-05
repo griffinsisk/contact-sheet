@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Photo, CullResult, DeepResult, Rating, ProviderConfig, ProfileAlignment } from "@/lib/types";
+import { Photo, CullResult, DeepResult, Rating, ProviderConfig, ProfileAlignment, DimensionScores } from "@/lib/types";
 import { formatExifLine, formatExifCamera } from "@/lib/exif";
 import { SCORE_DIMENSIONS } from "@/lib/constants";
 import { runResolutionTest } from "@/lib/api";
@@ -85,12 +85,44 @@ const DIMENSION_TEXT_COLORS: Record<string, string> = {
   story: "text-score-story",
 };
 
+function formatEditorialRole(role: DeepResult["editorialRole"]): string {
+  return role ? role.replace(/_/g, " ").toUpperCase() : "";
+}
+
+function ScoreDimensionBars({ dims, source }: { dims: DimensionScores; source: string }) {
+  return (
+    <div className="space-y-6 mb-12">
+      <div className="font-label text-[9px] tracking-widest uppercase text-on-surface-variant/60">
+        DIMENSION SCORES · {source}
+      </div>
+      {(Object.entries(SCORE_DIMENSIONS) as [string, { label: string; color: string; weight: string }][]).map(([key, dim]) => {
+        const score = dims[key as keyof DimensionScores] ?? 0;
+        return (
+          <div key={key} className="space-y-2">
+            <div className="flex justify-between font-label text-[10px] tracking-widest uppercase">
+              <span className="text-on-surface-variant">{dim.label} <span className="opacity-50">{dim.weight}</span></span>
+              <span className={DIMENSION_TEXT_COLORS[key]}>{score}%</span>
+            </div>
+            <div className="h-[2px] w-full bg-surface-high">
+              <div
+                className={`h-full ${DIMENSION_COLORS[key]} transition-all duration-1000 ease-out`}
+                style={{ width: `${score}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DetailPanel({ photo, cull, deep, ratingOverride, config, onRatingOverride, onClose }: Props) {
   const [resTest, setResTest] = useState<{ res512: CullResult; res1024: CullResult; res1536: CullResult } | null>(null);
   const [resTestLoading, setResTestLoading] = useState(false);
   if (!photo) return null;
 
-  const analysis = deep || cull;
+  const analysis = cull || deep;
+  const editorialRole = formatEditorialRole(deep?.editorialRole);
   const hasCullScoreBreakdown = !!cull && (
     cull.rubricScore !== undefined
     || cull.profileDelta !== undefined
@@ -165,7 +197,7 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
           )}
         </div>
 
-        {/* Title + Score */}
+        {/* Title + primary cull score */}
         {analysis && (
           <div className="flex justify-between items-baseline mb-8">
             <h1 className="font-headline italic text-3xl text-on-surface leading-tight pr-4">
@@ -274,42 +306,57 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
           </div>
         )}
 
-        {/* Score dimension bars — deep review scores preferred, cull scores as fallback */}
-        {(deep?.scores || cull?.scores) && (() => {
-          const dims = deep?.scores || cull!.scores!;
-          const source = deep?.scores ? "DEEP REVIEW" : "CULL";
-          return (
-            <div className="space-y-6 mb-12">
-              <div className="font-label text-[9px] tracking-widest uppercase text-on-surface-variant/60">
-                DIMENSION SCORES · {source}
-              </div>
-              {(Object.entries(SCORE_DIMENSIONS) as [string, { label: string; color: string; weight: string }][]).map(([key, dim]) => {
-                const score = dims[key as keyof typeof dims] ?? 0;
-                return (
-                  <div key={key} className="space-y-2">
-                    <div className="flex justify-between font-label text-[10px] tracking-widest uppercase">
-                      <span className="text-on-surface-variant">{dim.label} <span className="opacity-50">{dim.weight}</span></span>
-                      <span className={DIMENSION_TEXT_COLORS[key]}>{score}%</span>
-                    </div>
-                    <div className="h-[2px] w-full bg-surface-high">
-                      <div
-                        className={`h-full ${DIMENSION_COLORS[key]} transition-all duration-1000 ease-out`}
-                        style={{ width: `${score}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
+        {/* Cull score dimensions stay near the rating controls. Shortlist score moves below editor's notes. */}
+        {!deep && cull?.scores && <ScoreDimensionBars dims={cull.scores} source="CULL" />}
 
         {/* Feedback sections */}
         {deep && (
           <div className="space-y-8">
             <section>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h3 className="font-label text-[11px] text-primary border-l-2 border-primary/40 pl-3 tracking-widest">
+                  Editor's Notes
+                </h3>
+                {editorialRole && (
+                  <span className="bg-primary/15 text-primary border border-primary/30 px-2.5 py-1 font-label text-[10px] font-black uppercase tracking-widest">
+                    {editorialRole}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-6">
+                {deep.editDirection && (
+                  <div>
+                    <h4 className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mb-2">
+                      EDIT DIRECTION
+                    </h4>
+                    <p className="font-body text-sm text-on-surface/85 leading-relaxed">
+                      {deep.editDirection}
+                    </p>
+                  </div>
+                )}
+                {deep.cropOrCompositionNote && (
+                  <div>
+                    <h4 className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mb-2">
+                      CROP / COMPOSITION
+                    </h4>
+                    <p className="font-body text-sm text-on-surface/85 leading-relaxed">
+                      {deep.cropOrCompositionNote}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <h4 className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mb-2">
+                    VERDICT
+                  </h4>
+                  <p className="font-body text-sm text-on-surface leading-relaxed font-medium">
+                    {deep.verdict}
+                  </p>
+                </div>
+              </div>
+            </section>
+            <section>
               <h3 className="font-label text-[11px] text-on-surface-variant border-l-2 border-primary/40 pl-3 mb-4 uppercase tracking-widest">
-                TECHNICAL & COMPOSITION
+                TECHNICAL QUALITY
               </h3>
               <p className="font-body text-sm text-on-surface/80 leading-relaxed">
                 {deep.technical}
@@ -324,12 +371,13 @@ export default function DetailPanel({ photo, cull, deep, ratingOverride, config,
               </p>
             </section>
             <section>
-              <h3 className="font-label text-[11px] text-on-surface-variant border-l-2 border-primary/40 pl-3 mb-4 uppercase tracking-widest">
-                VERDICT
-              </h3>
-              <p className="font-body text-sm text-on-surface leading-relaxed font-medium">
-                {deep.verdict}
-              </p>
+              <div className="flex items-baseline justify-between mb-6 border-t border-outline-variant/10 pt-6">
+                <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">
+                  EDITOR'S SCORE
+                </span>
+                <span className="font-label text-4xl font-black text-primary">{deep.score}</span>
+              </div>
+              <ScoreDimensionBars dims={deep.scores} source="SECONDARY RUBRIC" />
             </section>
           </div>
         )}

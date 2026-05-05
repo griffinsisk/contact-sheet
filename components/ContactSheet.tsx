@@ -296,7 +296,7 @@ export default function ContactSheet() {
       setCullResults(results);
       if (tier === "free") incrementFreeUsage(target.length);
 
-      // Auto-select HERO + SELECT for deep review
+      // Auto-select HERO + SELECT for shortlist development
       const autoSelected = new Set<number>();
       Object.entries(results).forEach(([idx, r]) => {
         if (r.rating === "HERO" || r.rating === "SELECT") {
@@ -317,14 +317,14 @@ export default function ContactSheet() {
     }
   }, [config, photos, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, tasteLibrary.entries, ignoreTasteProfile, maybeAutoRegenProfile]);
 
-  // ── Deep review ─────────────────────────────────────────────────────────
+  // ── Shortlist development ───────────────────────────────────────────────
 
   const startDeepReview = useCallback(async () => {
     const indices = Array.from(deepSelected).sort((a, b) => a - b);
     if (indices.length === 0) return;
 
     if (indices.some(i => !photos[i]?.base64)) {
-      setError("Restored sessions can't run new deep review — re-import the originals.");
+      setError("Restored sessions can't build new editor's notes — re-import the originals.");
       return;
     }
 
@@ -366,7 +366,7 @@ export default function ContactSheet() {
       // Save session
       persistSession(photos, cullResults, analyses, notes, seq, true);
     } catch (err: any) {
-      setError(err.message || "Deep review failed");
+      setError(err.message || "Shortlist development failed");
       setPhase("culled");
       setProgressMsg("");
     }
@@ -498,6 +498,17 @@ export default function ContactSheet() {
     const prevRating = ratingOverrides[index];
     const cull = cullResults[index];
     const photo = photos[index];
+    const syncShortlistSelection = (effectiveRating: Rating) => {
+      setDeepSelected(prev => {
+        const next = new Set(prev);
+        if (effectiveRating === "HERO" || effectiveRating === "SELECT") {
+          next.add(index);
+        } else {
+          next.delete(index);
+        }
+        return next;
+      });
+    };
 
     // User reverted to the AI's original rating — clean up any saved
     // override for this frame so it stops weighting future culls and stops
@@ -513,10 +524,12 @@ export default function ContactSheet() {
           .then(({ hash }) => removeOverride(hash))
           .catch(() => { /* hash failure is harmless here */ });
       }
+      syncShortlistSelection(cull.rating);
       return;
     }
 
     setRatingOverrides(prev => ({ ...prev, [index]: rating }));
+    syncShortlistSelection(rating);
 
     // Capture the correction as a signal feeding the taste-profile regen
     // (Phase D). shortDescription is filled in by the describe call below; an
@@ -636,11 +649,11 @@ export default function ContactSheet() {
 
   const showToolbar = photos.length > 0 && phase !== "empty" && phase !== "uploading" && phase !== "ready";
   const isRestoredSession = photos.length > 0 && photos.every(p => p.isRestored);
-  // Effective rating = override > deep > cull
+  // Effective rating = override > cull. Editor notes are secondary metadata.
   const getEffectiveRating = (index: number) => {
     if (ratingOverrides[index]) return ratingOverrides[index];
-    if (deepResults[index]) return deepResults[index].rating;
     if (cullResults[index]) return cullResults[index].rating;
+    if (deepResults[index]) return deepResults[index].rating;
     return null;
   };
   const heroCount = photos.reduce((n, _, i) => n + (getEffectiveRating(i) === "HERO" ? 1 : 0), 0);
@@ -649,8 +662,8 @@ export default function ContactSheet() {
   // ── Sort & filter ──────────────────────────────────────────────────────
 
   const getScore = (index: number) => {
-    if (deepResults[index]) return deepResults[index].score;
     if (cullResults[index]) return cullResults[index].score;
+    if (deepResults[index]) return deepResults[index].score;
     return 0;
   };
 
@@ -966,7 +979,7 @@ export default function ContactSheet() {
           </div>
         )}
 
-        {/* Cull banner — always show after cull so user can trigger deep review */}
+        {/* Cull banner — always show after cull so user can develop the shortlist */}
         {phase === "culled" && (
           <CullBanner
             deepCount={deepSelected.size}
@@ -975,10 +988,10 @@ export default function ContactSheet() {
           />
         )}
 
-        {/* Curatorial notes banner (after deep review) */}
+        {/* Editor's notes banner (after shortlist development) */}
         {phase === "reviewed" && curatorialNotes && (
           <div className="mx-8 mt-4 p-6 bg-surface-low border-l-2 border-primary">
-            <h3 className="font-label text-[11px] text-primary uppercase tracking-widest mb-3">CURATORIAL NOTES</h3>
+            <h3 className="font-label text-[11px] text-primary tracking-widest mb-3">Editor's Notes</h3>
             <p className="font-body text-sm text-on-surface/80 leading-relaxed italic">{curatorialNotes}</p>
           </div>
         )}

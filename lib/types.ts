@@ -116,12 +116,17 @@ export interface CullResult {
   reason: string;
 }
 
+export type EditorialRole = "anchor" | "supporting" | "transition" | "detail" | "near_miss";
+
 export interface DeepResult {
   index: number;
   rating: Rating;
   score: number;
   scores: DimensionScores;
   title: string;
+  editorialRole?: EditorialRole;
+  editDirection?: string;
+  cropOrCompositionNote?: string;
   technical: string;
   style_story: string;
   verdict: string;

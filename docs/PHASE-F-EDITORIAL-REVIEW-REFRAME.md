@@ -1,6 +1,26 @@
 # Phase F - Editorial Review Reframe
 
-## Status: candidate follow-up after Phase E
+## Status: PR open, functional checks passed
+
+Phase F has been implemented on `feature/editorial-review-reframe`, pushed to GitHub, and opened as PR #5. It is not yet merged or deployed to production.
+
+- PR: https://github.com/griffinsisk/contact-sheet/pull/5
+- Latest functional commit: `36c4b12` (`Include promoted selects in shortlist development`)
+- Vercel preview: https://contact-sheet-git-feature-editoria-10da4d-griffinsisks-projects.vercel.app
+- Functional check status: Vercel and CodeRabbit passed on `36c4b12`.
+- Current PR head may include docs-only handoff commits; recheck with `gh pr checks 5`.
+- Preview access note: direct HTTP check returns 401 because Vercel preview protection/SSO is enabled.
+- Remaining work: run manual preview smoke, merge PR #5, then smoke production.
+
+Verification completed on 2026-05-04:
+
+```bash
+npm run typecheck      # passed
+npm run test:unit      # 29 passed
+npm run test:e2e       # 7 passed
+npm run build          # passed
+gh pr checks 5         # latest functional commit passed Vercel, Vercel Preview Comments, and CodeRabbit; recheck current PR head
+```
 
 Phase E made the cull pass stronger: scoring is now app-side, profile-aware, bounded, inspectable, and covered by live evals. That changes the role of the existing Deep Review feature.
 
@@ -19,7 +39,7 @@ The useful parts of Deep Review are not the second rating. They are:
 - richer critique for selected frames
 - title and description generation for export
 - edit/development direction
-- set-level curatorial notes
+- set-level editor's notes
 - recommended sequence
 
 ## Product Positioning
@@ -57,7 +77,7 @@ Editorial review should answer:
 - Is this a portfolio anchor, supporting image, transition frame, or near miss?
 - How does the selected set work together?
 
-## Proposed Output Shape
+## Implemented Output Shape
 
 Keep:
 
@@ -68,30 +88,29 @@ Keep:
 - `curatorial_notes`
 - `recommended_sequence`
 
-Consider adding:
+Added optional per-photo fields:
 
 ```ts
 editorialRole: "anchor" | "supporting" | "transition" | "detail" | "near_miss";
 editDirection: string;
 cropOrCompositionNote?: string;
-sequenceRationale?: string;
 ```
 
-Consider reducing or hiding:
-
-- second `score`
-- second `rating`
-- repeated dimension bars
-
-If scores remain in the data model for compatibility, the UI should make them secondary to the editorial notes. The user should not read this as a re-cull.
+The second `score`, `rating`, and dimension bars remain in the data model for compatibility, but the UI now makes the score secondary to editorial guidance. The user should read this as shortlist development, not a re-cull.
 
 ## UX Changes
 
-- Rename the CTA from `DEEP REVIEW N PHOTOS` to `DEVELOP SHORTLIST` or `EDITOR'S NOTES`.
-- Rename the grid toggle from `Review` to something like `Develop` or `Notes`.
-- In DetailPanel, prioritize editorial role, edit direction, and verdict over a second score.
-- Keep set-level notes visible after the pass; this is one of the strongest differentiators from cull.
-- Export should continue to use deep/editorial titles and descriptions when present.
+- CTA is now `DEVELOP SHORTLIST`.
+- Grid toggle is now `DEVELOP`.
+- Progress and sidebar copy now frame the pass as shortlist notes/development.
+- DetailPanel leads with `Editor's Notes`, editorial role, edit direction, crop/composition, and verdict.
+- The second score is shown lower as `EDITOR'S SCORE` with secondary rubric dimensions.
+- Set-level notes are shown as `Editor's Notes`.
+- Manifest export includes optional editorial role, edit direction, and crop/composition fields when present.
+- XMP export continues to use deep/editorial titles and descriptions when present.
+- Develop Shortlist now tracks the current effective rating, so manually promoted `HERO`/`SELECT` photos are included and manually demoted `MAYBE`/`CUT` photos are excluded.
+- Vercel proxy payloads for AI routes are split and downsized to avoid `Proxy 413: request failed` during larger Develop Shortlist calls.
+- Favorites now show a pending-regeneration cue in the profile modal, matching the correction signal behavior.
 
 ## Non-Goals
 
@@ -102,7 +121,7 @@ If scores remain in the data model for compatibility, the UI should make them se
 
 ## Validation
 
-Manual validation should focus on whether the feature earns its cost and time:
+Manual validation should still focus on whether the feature earns its cost and time:
 
 - After a Phase E cull, does the CTA feel like the obvious next step for a shortlist?
 - Do the notes help decide edit direction or sequencing?
@@ -111,11 +130,27 @@ Manual validation should focus on whether the feature earns its cost and time:
 
 Success means users understand this as editorial development, not a second opinion on the cull.
 
+Preview smoke checklist:
+
+- Open the preview while logged into the Vercel account/team.
+- Upload a small set and run cull.
+- Confirm the post-cull action reads `DEVELOP SHORTLIST`.
+- Run shortlist development and confirm set-level `Editor's Notes` appears.
+- Promote a `MAYBE` frame to `SELECT`, confirm the CTA count increases, and confirm Develop Shortlist includes that frame.
+- Confirm the Develop Shortlist request does not hit `Proxy 413: request failed` on the previously failing batch shape.
+- Star a favorite, open View Profile, and confirm the pending-regeneration cue appears until profile regen.
+- Open a developed frame and confirm editorial guidance appears before `EDITOR'S SCORE`.
+- Export the manifest and confirm editorial fields are included when returned by the model.
+- If preview smoke passes, merge PR #5 and verify production.
+
 ## Implementation Sketch
 
-1. Update product language in `CullBanner`, grid toggle labels, progress copy, and docs.
-2. Adjust the deep-review prompt to emphasize edit direction, role, set cohesion, and sequence rationale.
-3. Add optional structured fields for editorial role and edit direction.
-4. Update DetailPanel to lead with editorial notes and de-emphasize repeated scoring.
-5. Preserve old saved sessions by rendering missing editorial fields gracefully.
-6. Add mocked e2e coverage for the renamed flow and one export assertion if metadata changes.
+Completed:
+
+1. Updated product language in `CullBanner`, grid toggle labels, progress copy, sidebar, export copy, and docs.
+2. Adjusted the deep-review prompt to emphasize edit direction, role, set cohesion, and sequence rationale.
+3. Added optional structured fields for editorial role, edit direction, and crop/composition notes.
+4. Updated DetailPanel to lead with editorial notes and de-emphasize repeated scoring.
+5. Preserved old saved sessions by rendering missing editorial fields gracefully.
+6. Added mocked e2e coverage for the renamed flow and unit coverage for prompt/export contract changes.
+7. Added e2e coverage for manually promoted selects being included in Develop Shortlist.

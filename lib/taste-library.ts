@@ -1,5 +1,6 @@
 import type { Rating } from "./types";
 import type { OverrideEntry } from "./overrides";
+import { PROXY_PAYLOAD_SOFT_LIMIT_BYTES, estimateProxyBodyBytes } from "./proxy-payload";
 
 export interface TasteEntry {
   photoHash: string;
@@ -27,6 +28,8 @@ export interface TasteLibrary {
 
 const STORAGE_KEY = "cs-taste-library";
 const MAX_ENTRIES = 100;
+const PROFILE_REQUEST_ENTRY_LIMIT = 30;
+const MIN_PROFILE_REQUEST_ENTRIES = 4;
 
 export function emptyLibrary(): TasteLibrary {
   return { version: 1, entries: [] };
@@ -101,21 +104,32 @@ export async function generateTasteProfile(
   usedCorrectionCount: number;
 }> {
   const usable = library.entries.filter((e) => !!e.image);
-  if (usable.length < 4) {
-    throw new Error(`Need at least 4 favorites with image data; have ${usable.length}.`);
+  if (usable.length < MIN_PROFILE_REQUEST_ENTRIES) {
+    throw new Error(`Need at least ${MIN_PROFILE_REQUEST_ENTRIES} favorites with image data; have ${usable.length}.`);
   }
   // Only ship corrections that have a description (others were just hashed and
   // their describe call hadn't returned yet).
   const usableCorrections = (corrections ?? []).filter((c) => c.shortDescription.trim().length > 0);
-  const payload = {
-    entries: usable.map((e) => ({ photoHash: e.photoHash, image: e.image! })),
+  let requestEntries = usable.slice(0, PROFILE_REQUEST_ENTRY_LIMIT);
+  const buildPayload = (entries: TasteEntry[]) => ({
+    entries: entries.map((e) => ({ photoHash: e.photoHash, image: e.image! })),
     corrections: usableCorrections.map((c) => ({
       shortDescription: c.shortDescription,
       originalRating: c.originalRating,
       userRating: c.userRating,
       sessionIntent: c.sessionIntent,
     })),
-  };
+  });
+  while (
+    requestEntries.length >= MIN_PROFILE_REQUEST_ENTRIES
+    && estimateProxyBodyBytes(buildPayload(requestEntries)) > PROXY_PAYLOAD_SOFT_LIMIT_BYTES
+  ) {
+    requestEntries = requestEntries.slice(0, -1);
+  }
+  if (requestEntries.length < MIN_PROFILE_REQUEST_ENTRIES) {
+    throw new Error("Favorite images are too large for hosted profile generation. Use smaller seed images or bring your own key.");
+  }
+  const payload = buildPayload(requestEntries);
   const res = await fetch("/api/taste-profile", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -135,7 +149,7 @@ export async function generateTasteProfile(
     return {
       profile: null,
       coherence: json.coherence,
-      usedEntryCount: usable.length,
+      usedEntryCount: requestEntries.length,
       usedCorrectionCount: usableCorrections.length,
     };
   }
@@ -144,10 +158,10 @@ export async function generateTasteProfile(
       prose: json.prose,
       aestheticTags: json.aestheticTags,
       generatedAt: json.generatedAt,
-      generatedFromEntryCount: usable.length,
+      generatedFromEntryCount: requestEntries.length,
     },
     coherence: json.coherence,
-    usedEntryCount: usable.length,
+    usedEntryCount: requestEntries.length,
     usedCorrectionCount: usableCorrections.length,
   };
 }

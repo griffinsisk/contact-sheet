@@ -34,14 +34,14 @@ const PHRASES: Record<Phase, string[]> = {
     "Calling HERO or CUT",
   ],
   reviewing: [
-    "Writing the critique",
-    "Naming what works",
-    "Flagging what doesn't",
+    "Writing editor's notes",
+    "Naming the role",
+    "Finding the edit direction",
     "Noticing the gesture",
     "Reading expression",
     "Weighing tonality",
-    "Thinking about sequence",
-    "Finding the edit",
+    "Thinking through sequence",
+    "Shaping the shortlist",
   ],
 };
 
@@ -56,7 +56,7 @@ export default function CullProgress({ phase, statusMsg, done, total }: Props) {
     return () => clearInterval(id);
   }, [phrases.length]);
 
-  const heads = phase === "reviewing" ? "Deep review" : phase === "culling" ? "Culling" : "Loading";
+  const heads = phase === "reviewing" ? "Developing shortlist" : phase === "culling" ? "Culling" : "Loading";
 
   return (
     <div className="px-8 py-6">

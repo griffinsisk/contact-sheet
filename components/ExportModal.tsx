@@ -98,7 +98,7 @@ export default function ExportModal({ photos, cullResults, deepResults, ratingOv
               Generate deliverables
             </h1>
             <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-2">
-              {analyzedCount} culled · {deepCount} deep reviewed
+              {analyzedCount} culled · {deepCount} with editor's notes
             </p>
           </div>
           <button onClick={onClose} aria-label="Close export" className="text-on-surface-variant hover:text-on-surface transition-colors">

@@ -106,7 +106,7 @@ export async function exportToFolder(opts: ExportOptions): Promise<number> {
     const photo = photos[i];
     if (!photo.originalFile) continue; // skip restored sessions without originals
 
-    const effectiveRating = ratingOverrides?.[i] || deepResults[i]?.rating || cull.rating;
+    const effectiveRating = ratingOverrides?.[i] || cull.rating;
     const destDir = ratingDirs[effectiveRating] || ratingDirs["CUT"];
 
     let destName = photo.name;

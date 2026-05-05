@@ -6,6 +6,7 @@ import { formatExifForPrompt } from "./exif";
 import { downsizeForCull, resizeToMax } from "./resize";
 import { contentHash } from "./taste-library";
 import { applyProfileScoring } from "./profile-scoring";
+import { PROXY_PAYLOAD_SOFT_LIMIT_BYTES, estimateProxyBodyBytes, splitByEstimatedProxyBytes } from "./proxy-payload";
 
 type ProgressFn = (message: string, batch: number, total: number) => void;
 
@@ -33,6 +34,16 @@ interface ApiCallArgs {
   extraBody?: Record<string, unknown>;
 }
 
+function chunkByCount<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
+function proxyTooLargeMessage(bytes: number): string {
+  return `Hosted proxy request is too large (${Math.ceil(bytes / 1024 / 1024)} MB). Try fewer photos, or bring your own API key to bypass the hosted proxy.`;
+}
+
 /**
  * Single dispatch point: BYOK calls hit Anthropic (or the other providers)
  * directly via callProvider; tier-gated calls post to our own API routes
@@ -50,18 +61,27 @@ async function dispatchApiCall(
     });
   }
 
+  const body = {
+    images: args.images,
+    textParts: args.textParts,
+    maxTokens: args.maxTokens,
+    ...(args.extraBody ?? {}),
+  };
+  const estimatedBytes = estimateProxyBodyBytes(body);
+  if (estimatedBytes > PROXY_PAYLOAD_SOFT_LIMIT_BYTES) {
+    throw new Error(proxyTooLargeMessage(estimatedBytes));
+  }
+
   const res = await fetch(`/api/${args.endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      images: args.images,
-      textParts: args.textParts,
-      maxTokens: args.maxTokens,
-      ...(args.extraBody ?? {}),
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
+    if (res.status === 413) {
+      throw new Error("Hosted proxy rejected the request as too large. Try fewer photos, or bring your own API key to bypass the hosted proxy.");
+    }
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Proxy ${res.status}: request failed`);
   }
@@ -123,39 +143,60 @@ export async function runCull(
     // Downsize for cull pass
     const cullImages = await Promise.all(batch.map(b => downsizeForCull(b.photo)));
 
-    const images = cullImages.map(b64 => ({ base64: b64, mediaType: "image/jpeg" }));
-    const textParts = batch.map((b, i) =>
+    const profileForPrompt = promptProfile(profile);
+    const extraBody = {
+      ...(intent ? { intent } : {}),
+      ...(profileForPrompt ? { profile: profileForPrompt } : {}),
+    };
+    const prepared = batch.map((b, i) => ({
+      ...b,
+      image: { base64: cullImages[i], mediaType: "image/jpeg" },
+    }));
+    const makeCullTextParts = (items: typeof prepared) => items.map((b, i) =>
       `[Photo ${i}: ${b.photo.name}${formatExifForPrompt(b.photo.exif)}]`
     );
-    const profileForPrompt = promptProfile(profile);
-    const libraryMatchesPromise = findLibraryMatches(cullImages, profile);
+    const makeCullImages = (items: typeof prepared) => items.map(b => b.image);
+    const apiBatches = config
+      ? [prepared]
+      : splitByEstimatedProxyBytes(prepared, {
+          maxItems: CULL_BATCH_SIZE,
+          estimateBytes: (items) => estimateProxyBodyBytes({
+            images: makeCullImages(items),
+            textParts: makeCullTextParts(items),
+            maxTokens: 4096,
+            ...extraBody,
+          }),
+        });
 
-    const response = await dispatchApiCall({
-      config,
-      endpoint: "cull",
-      system: buildCullPrompt(intent, profileForPrompt),
-      images,
-      textParts,
-      maxTokens: 4096,
-      extraBody: {
-        ...(intent ? { intent } : {}),
-        ...(profileForPrompt ? { profile: profileForPrompt } : {}),
-      },
-    });
+    for (const apiBatch of apiBatches) {
+      const images = makeCullImages(apiBatch);
+      const textParts = makeCullTextParts(apiBatch);
+      const libraryMatchesPromise = findLibraryMatches(images.map(img => img.base64), profile);
 
-    const parsed = parseJSON(response.text, response.truncated) as CullResponse;
-    const cullData = parsed.cull || [];
-    const libraryMatches = await libraryMatchesPromise;
+      const response = await dispatchApiCall({
+        config,
+        endpoint: "cull",
+        system: buildCullPrompt(intent, profileForPrompt),
+        images,
+        textParts,
+        maxTokens: 4096,
+        extraBody,
+      });
 
-    cullData.forEach(c => {
-      const parsedIndex = Number(c.index);
-      const localIndex = Number.isInteger(parsedIndex) ? parsedIndex : 0;
-      const gIdx = batch[localIndex]?.globalIndex ?? localIndex;
-      allResults[gIdx] = applyProfileScoring(
-        { ...c, index: gIdx },
-        { hasProfile: !!profileForPrompt, libraryMatch: libraryMatches[localIndex] },
-      );
-    });
+      const parsed = parseJSON(response.text, response.truncated) as CullResponse;
+      const cullData = parsed.cull || [];
+      const libraryMatches = await libraryMatchesPromise;
+
+      cullData.forEach(c => {
+        const parsedIndex = Number(c.index);
+        const localIndex = Number.isInteger(parsedIndex) ? parsedIndex : 0;
+        const gIdx = apiBatch[localIndex]?.globalIndex ?? localIndex;
+        allResults[gIdx] = applyProfileScoring(
+          { ...c, index: gIdx },
+          { hasProfile: !!profileForPrompt, libraryMatch: libraryMatches[localIndex] },
+        );
+      });
+    }
   }
 
   return allResults;
@@ -175,10 +216,6 @@ export async function runDeepReview(
   recommendedSequence: number[] | null;
 }> {
   const subset = indices.map(i => ({ photo: photos[i], globalIndex: i }));
-  const batches: typeof subset[] = [];
-  for (let i = 0; i < subset.length; i += DEEP_BATCH_SIZE) {
-    batches.push(subset.slice(i, i + DEEP_BATCH_SIZE));
-  }
 
   const allResults: Record<number, DeepResult> = {};
   let lastNotes: string | null = null;
@@ -187,19 +224,39 @@ export async function runDeepReview(
   // For direct/BYOK: compose the full prompt here. For proxy: the server
   // re-composes using the same constants plus the `level` + `intent` in extraBody.
   const systemPrompt = buildDeepReviewPrompt(intent, profile) + (EXPERIENCE_VOICE[level] || EXPERIENCE_VOICE.enthusiast);
+  const extraBody = {
+    level,
+    ...(intent ? { intent } : {}),
+    ...(profile ? { profile } : {}),
+  };
+  const prepared = await Promise.all(subset.map(async (item) => ({
+    ...item,
+    image: config
+      ? { base64: item.photo.base64!, mediaType: item.photo.mediaType }
+      : { base64: await resizeToMax(item.photo, 1024, 0.82), mediaType: "image/jpeg" },
+  })));
+  const makeDeepTextParts = (items: typeof prepared) => items.map((b, i) =>
+    `[Photo ${i}: ${b.photo.name}${formatExifForPrompt(b.photo.exif)}]`
+  );
+  const makeDeepImages = (items: typeof prepared) => items.map(b => b.image);
+  const batches = config
+    ? chunkByCount(prepared, DEEP_BATCH_SIZE)
+    : splitByEstimatedProxyBytes(prepared, {
+        maxItems: DEEP_BATCH_SIZE,
+        estimateBytes: (items) => estimateProxyBodyBytes({
+          images: makeDeepImages(items),
+          textParts: makeDeepTextParts(items),
+          maxTokens: 16384,
+          ...extraBody,
+        }),
+      });
 
   for (let bi = 0; bi < batches.length; bi++) {
     const batch = batches[bi];
-    onProgress?.(`Deep review ${bi + 1} of ${batches.length}…`, bi, batches.length);
+    onProgress?.(`Developing shortlist ${bi + 1} of ${batches.length}…`, bi, batches.length);
 
-    const images = batch.map(b => ({
-      base64: b.photo.base64!,
-      mediaType: b.photo.mediaType,
-    }));
-
-    const textParts = batch.map((b, i) =>
-      `[Photo ${i}: ${b.photo.name}${formatExifForPrompt(b.photo.exif)}]`
-    );
+    const images = makeDeepImages(batch);
+    const textParts = makeDeepTextParts(batch);
 
     const response = await dispatchApiCall({
       config,
@@ -208,11 +265,7 @@ export async function runDeepReview(
       images,
       textParts,
       maxTokens: 16384,
-      extraBody: {
-        level,
-        ...(intent ? { intent } : {}),
-        ...(profile ? { profile } : {}),
-      },
+      extraBody,
     });
 
     const parsed = parseJSON(response.text, response.truncated) as DeepResponse;
@@ -233,10 +286,15 @@ export async function runCompare(
   photoB: Photo,
   config: ProviderConfig | null,
 ): Promise<CompareResponse> {
-  const images = [
-    { base64: photoA.base64!, mediaType: photoA.mediaType },
-    { base64: photoB.base64!, mediaType: photoB.mediaType },
-  ];
+  const images = config
+    ? [
+        { base64: photoA.base64!, mediaType: photoA.mediaType },
+        { base64: photoB.base64!, mediaType: photoB.mediaType },
+      ]
+    : [
+        { base64: await resizeToMax(photoA, 1024, 0.82), mediaType: "image/jpeg" },
+        { base64: await resizeToMax(photoB, 1024, 0.82), mediaType: "image/jpeg" },
+      ];
   const textParts = [
     `[Frame A: ${photoA.name}${formatExifForPrompt(photoA.exif)}]`,
     `[Frame B: ${photoB.name}${formatExifForPrompt(photoB.exif)}]\n\nCompare these two frames. Which is stronger?`,
