@@ -278,7 +278,18 @@ test("seeded favorite duplicates are recognized during cull scoring", async ({ p
 
   await expect(page.getByText("8 / 8–20")).toBeVisible();
   await page.getByRole("button", { name: "ADD TO LIBRARY" }).click();
-  await expect(page.getByText("Taste profile ready")).toBeVisible();
+  await expect(page.getByText("Taste profile ready", { exact: true })).toBeVisible();
+
+  const state = await page.evaluate(() => {
+    const raw = window.localStorage.getItem("cs-taste-libraries");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const active = parsed.libraries.find((library: { id: string }) => library.id === parsed.activeId) ?? parsed.libraries[0];
+    return { activeName: active.name, entryCount: active.entries.length, hasProfile: !!active.currentProfile };
+  });
+  expect(state?.entryCount).toBeGreaterThanOrEqual(8);
+  expect(state?.hasProfile).toBe(true);
+
   await page.getByRole("button", { name: "DONE" }).click();
 
   const cullChooserPromise = page.waitForEvent("filechooser");
