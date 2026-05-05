@@ -1,37 +1,58 @@
-# Next Session — Phase 1 Local Multi-Profile Taste Profiles
+# Next Session — Production Smoke / Phase 2 Taste Profile Persistence
 
-**Branch:** `feature/local-multi-profile-taste-profiles`
-**Build plan:** `docs/superpowers/plans/2026-05-05-local-multi-profile-taste-profiles.md`
+**Updated:** 2026-05-05
+**Current branch:** `main`
+**Latest merge:** PR #6, `d940f8f` — Add local multi-profile taste profiles
+**Production:** https://contact-sheet-three.vercel.app — returned HTTP 200 after merge
+**Phase 1 plan:** `docs/superpowers/plans/2026-05-05-local-multi-profile-taste-profiles.md`
 **Spec:** `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`
 
-Phase 1 local-only multi-profile taste profiles is implemented on this branch. It ships named local profiles, v2 localStorage collection migration, active-profile switching at cull time, per-profile favorites/profile regen, and `profileIdAtCull` correction scoping.
+Phase 1 local-only multi-profile taste profiles is merged to `main`. It ships named local profiles, v2 localStorage collection migration, active-profile switching at cull time, per-profile favorites/profile regen, and `profileIdAtCull` correction scoping.
 
 Clerk manifest, private Vercel Blob storage, private image resolution, and cross-device sync are deliberately deferred to Phase 2.
 
 ## Current State
 
 - PR #5 / Phase F is merged to `main` as `2f1bbb8`.
-- Local feature branch contains the Phase 1 local multi-profile implementation.
+- PR #6 / Phase 1 local multi-profile profiles is merged to `main` as `d940f8f`.
 - Storage now uses `cs-taste-libraries`; the old `cs-taste-library` key migrates into a v2 collection on first read.
 - Free users remain on one local library. Pro and BYOK paths can manage up to 3 named local profiles.
 - Profile generation and profile-modal correction display are scoped to the active profile.
 - New corrections store `profileIdAtCull`.
+- The new-profile modal focus bug found on Vercel preview was fixed in `3874304`; the upload/drop area now stays hidden until the new profile is actually created, preventing seed images from routing to the old active profile.
 
 ## Verification
 
 ```bash
 npm run typecheck      # passed
 npm run test:unit      # 34 passed
-npm run test:e2e       # 9 passed
+npm run test:e2e       # 10 passed
 npm run build          # passed
+npm test               # passed: unit + e2e
 ```
 
 ## Next Steps
 
-1. Open a PR from `feature/local-multi-profile-taste-profiles` to `main`.
-2. Smoke the preview: create/rename/switch profiles, seed profile A, create profile B, cull with each active profile, star/correct a frame, and confirm View Profile only shows signals for the active profile.
-3. If preview smoke passes, merge and confirm production deploy.
-4. Phase 2 remains server persistence: Clerk manifest, private Vercel Blob collection JSON, private image resolution, and cross-device sync.
+1. Run production smoke on https://contact-sheet-three.vercel.app:
+   - Create a new named profile and confirm typing does not lose focus.
+   - Seed the new profile and confirm View Profile shows favorites under that profile, not `My Profile`.
+   - Switch between profiles in the modal and at cull time.
+   - Cull once with each active profile and confirm the selected profile influences the request/profile context.
+   - Star and correct a frame, then confirm View Profile only shows signals for the active profile.
+2. If production smoke passes, tag Phase 1 as shipped in handoff notes.
+3. Start Phase 2 design/build for persistence:
+   - Clerk `tasteProfileManifest`
+   - private Vercel Blob `taste/{clerkUserId}/collection.json`
+   - private image upload/resolve/delete routes
+   - Pro sync and local-to-server migration
+   - conflict handling with `updatedAt`
+
+## Parking Lot
+
+- Auto-regen based on correction-count deltas, not only favorite-count deltas.
+- Visual anchors in cull prompt: pass 3-5 favorite thumbnails alongside a batch.
+- Counter-signal validation set for `diverged` behavior against corrected-down lookalikes.
+- Optional UX polish for profile creation: explicit cancel button for the create form.
 
 ---
 
