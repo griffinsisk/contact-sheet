@@ -151,6 +151,69 @@ test("creates and switches local taste profiles", async ({ page }) => {
   expect(state.activeId).toBe(state.libraries[1].id);
 });
 
+test("keeps profile name input focused and seeds the newly created profile", async ({ page }) => {
+  const seedFiles = await makeTasteSeedFiles();
+  const now = Date.now();
+
+  await page.route("**/api/taste-profile", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        prose: "You favor street frames with hard light and public gesture.",
+        aestheticTags: ["hard_light", "street_gesture"],
+        coherence: "high",
+        generatedAt: now,
+      }),
+    });
+  });
+
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Upload Favorites" }).click();
+  await page.getByRole("button", { name: "New Profile" }).click();
+
+  const profileName = page.getByLabel("Profile name");
+  await profileName.fill("");
+  await profileName.pressSequentially("Street");
+  await expect(profileName).toHaveValue("Street");
+  await expect(profileName).toBeFocused();
+  await expect(page.getByRole("region", { name: "Drop favorites here" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Create Profile" }).click();
+  await expect(page.getByRole("button", { name: "Street" })).toHaveAttribute("aria-pressed", "true");
+
+  const seedChooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("region", { name: "Drop favorites here" }).click();
+  const seedChooser = await seedChooserPromise;
+  await seedChooser.setFiles(seedFiles);
+
+  await expect(page.getByText("8 / 8–20")).toBeVisible();
+  await page.getByRole("button", { name: "ADD TO LIBRARY" }).click();
+  await expect(page.getByText("Taste profile ready", { exact: true })).toBeVisible();
+
+  const state = await page.evaluate(() => {
+    const raw = window.localStorage.getItem("cs-taste-libraries");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      activeId: parsed.activeId,
+      libraries: parsed.libraries.map((library: { id: string; name: string; entries: unknown[]; currentProfile?: unknown }) => ({
+        id: library.id,
+        name: library.name,
+        entryCount: library.entries.length,
+        hasProfile: !!library.currentProfile,
+      })),
+    };
+  });
+
+  const main = state?.libraries.find((library: { name: string }) => library.name === "My Profile");
+  const street = state?.libraries.find((library: { name: string }) => library.name === "Street");
+  expect(main?.entryCount).toBe(0);
+  expect(street?.entryCount).toBe(8);
+  expect(street?.hasProfile).toBe(true);
+  expect(state?.activeId).toBe(street?.id);
+});
+
 test("cull uses the selected active taste profile", async ({ page }) => {
   const requests: any[] = [];
   await page.unroute("**/api/cull");

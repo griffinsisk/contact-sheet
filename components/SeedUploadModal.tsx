@@ -61,7 +61,9 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
   const { user } = useUser();
   const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
   const canManageMultipleProfiles = allowMultipleProfiles || isPro;
+  const modalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const newProfileInputRef = useRef<HTMLInputElement>(null);
   const [staged, setStaged] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hashing, setHashing] = useState(false);
@@ -70,9 +72,14 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
   const [profileStatus, setProfileStatus] = useState<"idle" | "generating" | "done" | "skipped" | "error">("idle");
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
   const [regenPending, setRegenPending] = useState(false);
+  const [creatingProfile, setCreatingProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+
+  useEffect(() => {
+    modalRef.current?.focus();
+  }, []);
 
   const acceptFiles = useCallback((files: File[]) => {
     const valid = files.filter(isValidImage);
@@ -248,10 +255,21 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
     }
   }, [regenPending, library.lastRegenAt, pendingCorrectionCount, runProfileGeneration]);
 
+  const beginCreateProfile = useCallback(() => {
+    setCreatingProfile(true);
+    setNewProfileName("Untitled Profile");
+    setError(null);
+    requestAnimationFrame(() => {
+      newProfileInputRef.current?.focus();
+      newProfileInputRef.current?.select();
+    });
+  }, []);
+
   const handleCreateProfile = useCallback(() => {
     try {
       const id = createLibrary(newProfileName);
       setActiveId(id);
+      setCreatingProfile(false);
       setNewProfileName("");
       setError(null);
       setDoneCount(null);
@@ -291,6 +309,7 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
   const canManualRegen = isPro && usableEntryCount >= 4 && doneCount === null;
 
   const stagedValid = staged.length >= MIN_FILES && staged.length <= MAX_FILES;
+  const isCreatingProfile = canManageMultipleProfiles && creatingProfile;
 
   return (
     <div
@@ -301,7 +320,7 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
       onDrop={(e) => { e.preventDefault(); e.stopPropagation(); }}
       tabIndex={-1}
-      ref={(el: HTMLDivElement | null) => el?.focus()}
+      ref={modalRef}
     >
       <div className="w-full max-w-2xl bg-surface-bright p-8 md:p-12 max-h-[90vh] overflow-y-auto" style={{ boxShadow: "0 0 60px -15px rgba(0,0,0,0.8)" }}>
         <div className="flex justify-between items-start mb-10">
@@ -349,7 +368,7 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
               ))}
               <button
                 type="button"
-                onClick={() => setNewProfileName("Untitled Profile")}
+                onClick={beginCreateProfile}
                 disabled={collection.libraries.length >= 3}
                 className="px-3 py-2 font-label text-[10px] uppercase tracking-widest border border-outline-variant text-on-surface hover:bg-surface-high disabled:opacity-40"
               >
@@ -359,9 +378,10 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
           </div>
         )}
 
-        {canManageMultipleProfiles && newProfileName && (
+        {isCreatingProfile && (
           <div className="mb-6 flex gap-2">
             <input
+              ref={newProfileInputRef}
               aria-label="Profile name"
               value={newProfileName}
               onChange={(e) => setNewProfileName(e.target.value)}
@@ -375,6 +395,12 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
             >
               Create Profile
             </button>
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-6 px-4 py-3 bg-error/10 border-l-2 border-error">
+            <span className="mono-label text-[11px] text-error">{error}</span>
           </div>
         )}
 
@@ -431,7 +457,7 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
           </div>
         ) : (
           <>
-            {!isViewOnly && (<>
+            {!isViewOnly && !isCreatingProfile && (<>
             <div
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
@@ -493,12 +519,6 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
                     Hashing {progress.done} / {progress.total}…
                   </span>
                 </div>
-              </div>
-            )}
-
-            {error && (
-              <div className="mb-6 px-4 py-3 bg-error/10 border-l-2 border-error">
-                <span className="mono-label text-[11px] text-error">{error}</span>
               </div>
             )}
 
