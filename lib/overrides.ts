@@ -9,6 +9,7 @@ export interface OverrideEntry {
   originalRating: Rating;
   userRating: Rating;
   timestamp: number;
+  profileIdAtCull?: string | null;
 }
 
 export interface OverrideStore {
@@ -71,6 +72,28 @@ export function removeOverride(photoHash: string): void {
 
 export function clearAllOverrides(): void {
   setOverridesClient(emptyStore());
+}
+
+export function correctionsForProfile(entries: OverrideEntry[], profileId: string | null | undefined): OverrideEntry[] {
+  if (!profileId) return [];
+  return entries.filter((entry) => entry.profileIdAtCull === profileId);
+}
+
+export function scopeUnscopedOverrides(store: OverrideStore, profileId: string): OverrideStore {
+  return {
+    ...store,
+    entries: store.entries.map((entry) =>
+      entry.profileIdAtCull === undefined ? { ...entry, profileIdAtCull: profileId } : entry
+    ),
+  };
+}
+
+export function scopeUnscopedOverridesClient(profileId: string): void {
+  const current = getOverridesClient();
+  const next = scopeUnscopedOverrides(current, profileId);
+  if (JSON.stringify(next) !== JSON.stringify(current)) {
+    setOverridesClient(next);
+  }
 }
 
 const RATING_ORDER: Rating[] = ["CUT", "MAYBE", "SELECT", "HERO"];

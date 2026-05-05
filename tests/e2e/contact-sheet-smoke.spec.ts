@@ -131,6 +131,149 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("creates and switches local taste profiles", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Upload Favorites" }).click();
+  await expect(page.getByRole("button", { name: "My Profile" })).toBeVisible();
+
+  await page.getByRole("button", { name: "New Profile" }).click();
+  await page.getByLabel("Profile name").fill("Street");
+  await page.getByRole("button", { name: "Create Profile" }).click();
+
+  await expect(page.getByRole("button", { name: "Street" })).toHaveAttribute("aria-pressed", "true");
+
+  const state = await page.evaluate(() => {
+    const raw = window.localStorage.getItem("cs-taste-libraries");
+    return raw ? JSON.parse(raw) : null;
+  });
+  expect(state.libraries.map((library: { name: string }) => library.name)).toEqual(["My Profile", "Street"]);
+  expect(state.activeId).toBe(state.libraries[1].id);
+});
+
+test("keeps profile name input focused and seeds the newly created profile", async ({ page }) => {
+  const seedFiles = await makeTasteSeedFiles();
+  const now = Date.now();
+
+  await page.route("**/api/taste-profile", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        prose: "You favor street frames with hard light and public gesture.",
+        aestheticTags: ["hard_light", "street_gesture"],
+        coherence: "high",
+        generatedAt: now,
+      }),
+    });
+  });
+
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Upload Favorites" }).click();
+  await page.getByRole("button", { name: "New Profile" }).click();
+
+  const profileName = page.getByLabel("Profile name");
+  await profileName.fill("");
+  await profileName.pressSequentially("Street");
+  await expect(profileName).toHaveValue("Street");
+  await expect(profileName).toBeFocused();
+  await expect(page.getByRole("region", { name: "Drop favorites here" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Create Profile" }).click();
+  await expect(page.getByRole("button", { name: "Street" })).toHaveAttribute("aria-pressed", "true");
+
+  const seedChooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("region", { name: "Drop favorites here" }).click();
+  const seedChooser = await seedChooserPromise;
+  await seedChooser.setFiles(seedFiles);
+
+  await expect(page.getByText("8 / 8–20")).toBeVisible();
+  await page.getByRole("button", { name: "ADD TO LIBRARY" }).click();
+  await expect(page.getByText("Taste profile ready", { exact: true })).toBeVisible();
+
+  const state = await page.evaluate(() => {
+    const raw = window.localStorage.getItem("cs-taste-libraries");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      activeId: parsed.activeId,
+      libraries: parsed.libraries.map((library: { id: string; name: string; entries: unknown[]; currentProfile?: unknown }) => ({
+        id: library.id,
+        name: library.name,
+        entryCount: library.entries.length,
+        hasProfile: !!library.currentProfile,
+      })),
+    };
+  });
+
+  const main = state?.libraries.find((library: { name: string }) => library.name === "My Profile");
+  const street = state?.libraries.find((library: { name: string }) => library.name === "Street");
+  expect(main?.entryCount).toBe(0);
+  expect(street?.entryCount).toBe(8);
+  expect(street?.hasProfile).toBe(true);
+  expect(state?.activeId).toBe(street?.id);
+});
+
+test("cull uses the selected active taste profile", async ({ page }) => {
+  const requests: any[] = [];
+  await page.unroute("**/api/cull");
+  await page.route("**/api/cull", async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        text: JSON.stringify({
+          cull: [{
+            index: 0,
+            score: 72,
+            rating: "SELECT",
+            scores: { impact: 74, composition: 72, rawQuality: 80, craftExecution: 70, story: 62 },
+            reason: "Profile-aware test result.",
+          }],
+        }),
+        truncated: false,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.evaluate(() => {
+    window.localStorage.setItem("cs-taste-libraries", JSON.stringify({
+      version: 2,
+      activeId: "wedding",
+      updatedAt: Date.now(),
+      libraries: [
+        {
+          version: 2,
+          id: "wedding",
+          name: "Wedding",
+          entries: [],
+          currentProfile: { prose: "soft ceremony emotion", aestheticTags: ["soft"], generatedAt: 1, generatedFromEntryCount: 8 },
+        },
+        {
+          version: 2,
+          id: "street",
+          name: "Street",
+          entries: [],
+          currentProfile: { prose: "hard light public moments", aestheticTags: ["hard_light"], generatedAt: 2, generatedFromEntryCount: 8 },
+        },
+      ],
+    }));
+  });
+  await page.reload();
+
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Pick Files" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles([{ name: "red-dot.png", mimeType: "image/png", buffer: RED_DOT_PNG }]);
+
+  await page.getByRole("button", { name: /Mixed/ }).click();
+  await page.getByLabel("Taste profile", { exact: true }).selectOption("street");
+  await page.getByRole("button", { name: /START CULL/i }).click();
+
+  await expect.poll(() => Promise.resolve(requests[0]?.profile?.prose)).toBe("hard light public moments");
+});
+
 test("cull, correction, and star signals are persisted with mocked APIs", async ({ page }) => {
   await uploadAndCullTwoPhotos(page);
 
@@ -149,15 +292,25 @@ test("cull, correction, and star signals are persisted with mocked APIs", async 
     });
   }).toBe("Minimal red color field, centered composition, no visible subject or story");
 
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const raw = window.localStorage.getItem("cs-overrides");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed.entries?.[0]?.profileIdAtCull || null;
+    });
+  }).not.toBeNull();
+
   await page.getByLabel("Add to taste library").first().click();
   await expect(page.getByText("Saved to library")).toBeVisible();
 
   await expect.poll(async () => {
     return page.evaluate(() => {
-      const raw = window.localStorage.getItem("cs-taste-library");
+      const raw = window.localStorage.getItem("cs-taste-libraries");
       if (!raw) return 0;
       const parsed = JSON.parse(raw);
-      return parsed.entries?.length ?? 0;
+      const active = parsed.libraries.find((library: { id: string }) => library.id === parsed.activeId) ?? parsed.libraries[0];
+      return active?.entries?.length ?? 0;
     });
   }).toBe(1);
 });
@@ -188,7 +341,18 @@ test("seeded favorite duplicates are recognized during cull scoring", async ({ p
 
   await expect(page.getByText("8 / 8–20")).toBeVisible();
   await page.getByRole("button", { name: "ADD TO LIBRARY" }).click();
-  await expect(page.getByText("Taste profile ready")).toBeVisible();
+  await expect(page.getByText("Taste profile ready", { exact: true })).toBeVisible();
+
+  const state = await page.evaluate(() => {
+    const raw = window.localStorage.getItem("cs-taste-libraries");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const active = parsed.libraries.find((library: { id: string }) => library.id === parsed.activeId) ?? parsed.libraries[0];
+    return { activeName: active.name, entryCount: active.entries.length, hasProfile: !!active.currentProfile };
+  });
+  expect(state?.entryCount).toBeGreaterThanOrEqual(8);
+  expect(state?.hasProfile).toBe(true);
+
   await page.getByRole("button", { name: "DONE" }).click();
 
   const cullChooserPromise = page.waitForEvent("filechooser");

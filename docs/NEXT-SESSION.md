@@ -1,9 +1,46 @@
-# Next Session — Phase F: Develop Shortlist / Editor's Notes
+# Next Session — Phase 1 Local Multi-Profile Taste Profiles
+
+**Branch:** `feature/local-multi-profile-taste-profiles`
+**Build plan:** `docs/superpowers/plans/2026-05-05-local-multi-profile-taste-profiles.md`
+**Spec:** `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`
+
+Phase 1 local-only multi-profile taste profiles is implemented on this branch. It ships named local profiles, v2 localStorage collection migration, active-profile switching at cull time, per-profile favorites/profile regen, and `profileIdAtCull` correction scoping.
+
+Clerk manifest, private Vercel Blob storage, private image resolution, and cross-device sync are deliberately deferred to Phase 2.
+
+## Current State
+
+- PR #5 / Phase F is merged to `main` as `2f1bbb8`.
+- Local feature branch contains the Phase 1 local multi-profile implementation.
+- Storage now uses `cs-taste-libraries`; the old `cs-taste-library` key migrates into a v2 collection on first read.
+- Free users remain on one local library. Pro and BYOK paths can manage up to 3 named local profiles.
+- Profile generation and profile-modal correction display are scoped to the active profile.
+- New corrections store `profileIdAtCull`.
+
+## Verification
+
+```bash
+npm run typecheck      # passed
+npm run test:unit      # 34 passed
+npm run test:e2e       # 9 passed
+npm run build          # passed
+```
+
+## Next Steps
+
+1. Open a PR from `feature/local-multi-profile-taste-profiles` to `main`.
+2. Smoke the preview: create/rename/switch profiles, seed profile A, create profile B, cull with each active profile, star/correct a frame, and confirm View Profile only shows signals for the active profile.
+3. If preview smoke passes, merge and confirm production deploy.
+4. Phase 2 remains server persistence: Clerk manifest, private Vercel Blob collection JSON, private image resolution, and cross-device sync.
+
+---
+
+# Previous Session Context — Phase F: Develop Shortlist / Editor's Notes
 
 **Updated:** 2026-05-04
-**Current branch:** `feature/editorial-review-reframe`
-**Prod:** https://contact-sheet-three.vercel.app — Phases A/B/C/D/E live. Phase F is not merged/deployed yet.
-**Current PR:** https://github.com/griffinsisk/contact-sheet/pull/5
+**Current branch:** merged to `main`
+**Prod:** https://contact-sheet-three.vercel.app — Phases A/B/C/D/E live. Check production for Phase F deploy status before relying on prod behavior.
+**PR:** https://github.com/griffinsisk/contact-sheet/pull/5 — merged 2026-05-05 UTC.
 **Vercel preview:** https://contact-sheet-git-feature-editoria-10da4d-griffinsisks-projects.vercel.app
 **Last shipped PR:** #4 — Phase E profile-aware scoring.
 **Current plan:** `docs/PHASE-F-EDITORIAL-REVIEW-REFRAME.md`

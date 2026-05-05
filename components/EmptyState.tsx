@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
 import { ExperienceLevel, SessionSummary } from "@/lib/types";
 import { isE2EMockPro } from "@/lib/e2e";
 import { isRawFile } from "@/lib/raw-preview";
-import { getTasteLibraryClient, type TasteLibrary } from "@/lib/taste-library";
+import { useTasteLibrary } from "@/hooks/useTasteLibrary";
 import SeedUploadModal from "./SeedUploadModal";
 
 interface Props {
@@ -15,23 +15,27 @@ interface Props {
   sessions: SessionSummary[];
   onRestoreSession: (id: string) => void;
   onOpenSettings: () => void;
+  allowMultipleProfiles?: boolean;
 }
 
-export default function EmptyState({ level, onLevelChange, onFiles, sessions, onRestoreSession, onOpenSettings }: Props) {
+export default function EmptyState({
+  level,
+  onLevelChange,
+  onFiles,
+  sessions,
+  onRestoreSession,
+  onOpenSettings,
+  allowMultipleProfiles = false,
+}: Props) {
   const { user } = useUser();
   const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
   const [seedModalMode, setSeedModalMode] = useState<"manage" | "view">("manage");
-  const [library, setLibrary] = useState<TasteLibrary | null>(null);
+  const { library } = useTasteLibrary();
 
-  useEffect(() => {
-    if (!isPro) return;
-    if (!showSeedModal) setLibrary(getTasteLibraryClient());
-  }, [isPro, showSeedModal]);
-
-  const profile = library?.currentProfile;
-  const seedCount = library?.entries.length ?? 0;
+  const profile = library.currentProfile;
+  const seedCount = library.entries.length;
 
   const startCheckout = async () => {
     setUpgradeLoading(true);
@@ -239,7 +243,7 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
                   TASTE PROFILE READY
                 </span>
                 <p className="mt-2 text-sm text-on-surface-variant max-w-2xl">
-                  {seedCount} favorite{seedCount === 1 ? "" : "s"} · {profile.aestheticTags.length} tag{profile.aestheticTags.length === 1 ? "" : "s"} · updated {new Date(profile.generatedAt).toLocaleDateString()}. Future culls bias toward how you see.
+                  {seedCount} favorite{seedCount === 1 ? "" : "s"} in {library.name} · {profile.aestheticTags.length} tag{profile.aestheticTags.length === 1 ? "" : "s"} · updated {new Date(profile.generatedAt).toLocaleDateString()}. Future culls bias toward how you see.
                 </p>
               </>
             ) : (
@@ -410,6 +414,7 @@ export default function EmptyState({ level, onLevelChange, onFiles, sessions, on
         <SeedUploadModal
           onClose={() => setShowSeedModal(false)}
           mode={seedModalMode}
+          allowMultipleProfiles={allowMultipleProfiles}
         />
       )}
     </main>

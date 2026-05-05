@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import { useTasteLibrary } from "@/hooks/useTasteLibrary";
 import UpgradeButton from "./UpgradeButton";
 import SeedUploadModal from "./SeedUploadModal";
 
@@ -9,10 +10,15 @@ interface Props {
   onHistory: () => void;
   onSettings: () => void;
   onAddFiles: () => void;
+  allowMultipleProfiles?: boolean;
 }
 
-export default function Header({ onHistory, onSettings, onAddFiles }: Props) {
+export default function Header({ onHistory, onSettings, onAddFiles, allowMultipleProfiles = false }: Props) {
   const [showSeedModal, setShowSeedModal] = useState(false);
+  const { library, collection } = useTasteLibrary();
+  const profileTitle = library.currentProfile
+    ? `Taste profile: ${library.name}`
+    : "Add favorites to taste library";
 
   return (
     <header className="fixed top-0 z-50 flex justify-between items-center w-full px-6 py-4 bg-background">
@@ -36,11 +42,16 @@ export default function Header({ onHistory, onSettings, onAddFiles }: Props) {
         </button>
         <button
           onClick={() => setShowSeedModal(true)}
-          className="text-on-surface/60 hover:text-primary transition-colors duration-200 p-2"
-          aria-label="Add favorites to taste library"
-          title="Add favorites to taste library"
+          className="text-on-surface/60 hover:text-primary transition-colors duration-200 p-2 flex items-center gap-2"
+          aria-label={profileTitle}
+          title={profileTitle}
         >
           <span className="material-symbols-outlined">palette</span>
+          {collection.libraries.length > 1 && (
+            <span className="hidden lg:inline mono-label text-[10px] text-on-surface-variant max-w-[120px] truncate">
+              {library.name}
+            </span>
+          )}
         </button>
         <button
           onClick={onHistory}
@@ -69,7 +80,12 @@ export default function Header({ onHistory, onSettings, onAddFiles }: Props) {
           <UserButton />
         </SignedIn>
       </div>
-      {showSeedModal && <SeedUploadModal onClose={() => setShowSeedModal(false)} />}
+      {showSeedModal && (
+        <SeedUploadModal
+          onClose={() => setShowSeedModal(false)}
+          allowMultipleProfiles={allowMultipleProfiles}
+        />
+      )}
     </header>
   );
 }

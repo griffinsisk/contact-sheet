@@ -44,7 +44,14 @@ export default function ContactSheet() {
   const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
 
   // Taste library (Pro-only profile injection — soft bias under intent)
-  const { library: tasteLibrary, setProfile: setTasteProfile, setLastRegenAt: setTasteLastRegenAt } = useTasteLibrary();
+  const {
+    library: tasteLibrary,
+    collection: tasteCollection,
+    activeId: activeTasteProfileId,
+    setActiveId: setActiveTasteProfileId,
+    setProfile: setTasteProfile,
+    setLastRegenAt: setTasteLastRegenAt,
+  } = useTasteLibrary();
   const { store: overridesStore, add: addOverride, remove: removeOverride } = useOverrides();
 
   // Provider
@@ -547,6 +554,7 @@ export default function ContactSheet() {
         originalRating: cull.rating,
         userRating: rating,
         timestamp: Date.now(),
+        profileIdAtCull: activeTasteProfileId,
       };
       addOverride(baseEntry);
 
@@ -580,7 +588,7 @@ export default function ContactSheet() {
         // out at regen time, so the correction is silent until the call returns
       }
     }).catch(() => { /* hash failure shouldn't block UI override */ });
-  }, [cullResults, photos, intentPreset, addOverride, removeOverride, ratingOverrides]);
+  }, [activeTasteProfileId, cullResults, photos, intentPreset, addOverride, removeOverride, ratingOverrides]);
 
   // ── Main area drag-and-drop ──────────────────────────────────────────────
 
@@ -695,6 +703,7 @@ export default function ContactSheet() {
   }
 
   const tier = resolveTier(config, isPro);
+  const allowMultipleTasteProfiles = tier === "pro" || tier === "byok";
   const freeUsage = tier === "free" ? getFreeUsage() : null;
 
   return (
@@ -703,6 +712,7 @@ export default function ContactSheet() {
         onHistory={() => setShowSessions(true)}
         onSettings={() => setShowSettings(true)}
         onAddFiles={() => fileInputRef.current?.click()}
+        allowMultipleProfiles={allowMultipleTasteProfiles}
       />
       <Sidebar phase={phase} />
 
@@ -748,6 +758,7 @@ export default function ContactSheet() {
             sessions={sessions}
             onRestoreSession={handleRestoreSession}
             onOpenSettings={() => setShowSettings(true)}
+            allowMultipleProfiles={allowMultipleTasteProfiles}
           />
         )}
 
@@ -843,6 +854,29 @@ export default function ContactSheet() {
             )}
 
             <div className="pt-4 border-t border-outline-variant">
+              {tasteCollection.libraries.length > 1 && (
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <label htmlFor="taste-profile-picker" className="font-label text-[11px] text-on-surface uppercase tracking-widest">
+                    Taste profile
+                  </label>
+                  <select
+                    id="taste-profile-picker"
+                    aria-label="Taste profile"
+                    value={activeTasteProfileId ?? ""}
+                    onChange={(e) => setActiveTasteProfileId(e.target.value || null)}
+                    className="bg-surface-high text-on-surface px-3 py-2 font-label text-[11px] uppercase tracking-widest border border-outline-variant"
+                  >
+                    {tasteCollection.libraries.map((profile) => (
+                      <option key={profile.id} value={profile.id}>{profile.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {tasteCollection.libraries.length === 1 && tasteLibrary.currentProfile && (
+                <div className="mb-4 font-label text-[11px] text-on-surface-variant uppercase tracking-widest">
+                  Taste profile: {tasteLibrary.name}
+                </div>
+              )}
               <IntentPicker
                 preset={intentPreset}
                 freeForm={intentFreeForm}
