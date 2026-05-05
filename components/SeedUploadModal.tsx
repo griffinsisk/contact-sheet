@@ -30,6 +30,7 @@ const REGEN_THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 hours
 interface Props {
   onClose: () => void;
   mode?: "manage" | "view";
+  allowMultipleProfiles?: boolean;
 }
 
 const MIN_FILES = 8;
@@ -42,11 +43,24 @@ function isValidImage(file: File): boolean {
   return ACCEPT_EXT.test(file.name);
 }
 
-export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
+export default function SeedUploadModal({ onClose, mode = "manage", allowMultipleProfiles = false }: Props) {
   const isViewOnly = mode === "view";
-  const { addEntries, library, setProfile, setLastRegenAt, toggleFavorite } = useTasteLibrary();
+  const {
+    addEntries,
+    library,
+    collection,
+    activeId,
+    setActiveId,
+    createLibrary,
+    renameLibrary,
+    deleteLibrary,
+    setProfile,
+    setLastRegenAt,
+    toggleFavorite,
+  } = useTasteLibrary();
   const { user } = useUser();
   const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
+  const canManageMultipleProfiles = allowMultipleProfiles || isPro;
   const inputRef = useRef<HTMLInputElement>(null);
   const [staged, setStaged] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +70,9 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
   const [profileStatus, setProfileStatus] = useState<"idle" | "generating" | "done" | "skipped" | "error">("idle");
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
   const [regenPending, setRegenPending] = useState(false);
+  const [newProfileName, setNewProfileName] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const acceptFiles = useCallback((files: File[]) => {
     const valid = files.filter(isValidImage);
@@ -229,6 +246,45 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
     }
   }, [regenPending, library.lastRegenAt, pendingCorrectionCount, runProfileGeneration]);
 
+  const handleCreateProfile = useCallback(() => {
+    try {
+      const id = createLibrary(newProfileName);
+      setActiveId(id);
+      setNewProfileName("");
+      setError(null);
+      setDoneCount(null);
+      setProfileStatus("idle");
+      setProfileMsg(null);
+    } catch (err: any) {
+      setError(err?.message || "Could not create profile.");
+    }
+  }, [createLibrary, newProfileName, setActiveId]);
+
+  const beginRename = useCallback((id: string, name: string) => {
+    setRenamingId(id);
+    setRenameValue(name);
+  }, []);
+
+  const commitRename = useCallback(() => {
+    if (!renamingId) return;
+    try {
+      renameLibrary(renamingId, renameValue);
+      setRenamingId(null);
+      setRenameValue("");
+      setError(null);
+    } catch (err: any) {
+      setError(err?.message || "Could not rename profile.");
+    }
+  }, [renameLibrary, renameValue, renamingId]);
+
+  const handleDeleteProfile = useCallback((id: string, name: string) => {
+    if (!window.confirm(`Delete "${name}" profile? This removes its favorites and generated profile.`)) return;
+    deleteLibrary(id);
+    setDoneCount(null);
+    setProfileStatus("idle");
+    setProfileMsg(null);
+  }, [deleteLibrary]);
+
   const usableEntryCount = library.entries.filter((e) => !!e.image).length;
   const canManualRegen = isPro && usableEntryCount >= 4 && doneCount === null;
 
@@ -257,8 +313,8 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
             </h1>
             <p className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mt-2">
               {isViewOnly
-                ? "How future culls read your eye"
-                : `Pick ${MIN_FILES}–${MAX_FILES} photos that represent how you see`}
+                ? `How future culls read ${library.name}`
+                : `Pick ${MIN_FILES}–${MAX_FILES} photos for ${library.name}`}
             </p>
           </div>
           <button
@@ -270,6 +326,55 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
+
+        {canManageMultipleProfiles && collection.libraries.length > 0 && (
+          <div className="mb-6 border border-outline-variant/40 bg-surface-lowest/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {collection.libraries.map((profile) => (
+                <button
+                  key={profile.id}
+                  type="button"
+                  onClick={() => setActiveId(profile.id)}
+                  aria-pressed={activeId === profile.id}
+                  className={`px-3 py-2 font-label text-[10px] uppercase tracking-widest border transition-colors ${
+                    activeId === profile.id
+                      ? "border-primary bg-primary text-on-primary"
+                      : "border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-high"
+                  }`}
+                >
+                  {profile.name}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setNewProfileName("Untitled Profile")}
+                disabled={collection.libraries.length >= 3}
+                className="px-3 py-2 font-label text-[10px] uppercase tracking-widest border border-outline-variant text-on-surface hover:bg-surface-high disabled:opacity-40"
+              >
+                New Profile
+              </button>
+            </div>
+          </div>
+        )}
+
+        {canManageMultipleProfiles && newProfileName && (
+          <div className="mb-6 flex gap-2">
+            <input
+              aria-label="Profile name"
+              value={newProfileName}
+              onChange={(e) => setNewProfileName(e.target.value)}
+              maxLength={30}
+              className="flex-1 bg-surface-low border border-outline-variant px-3 py-2 text-on-surface"
+            />
+            <button
+              type="button"
+              onClick={handleCreateProfile}
+              className="px-4 py-2 bg-primary text-on-primary font-label text-[10px] uppercase tracking-widest"
+            >
+              Create Profile
+            </button>
+          </div>
+        )}
 
         {doneCount !== null ? (
           <div className="space-y-6">
@@ -427,6 +532,36 @@ export default function SeedUploadModal({ onClose, mode = "manage" }: Props) {
                         : "No profile yet"}
                       {library.lastRegenAt && ` · last run ${new Date(library.lastRegenAt).toLocaleDateString()}`}
                     </div>
+                    {canManageMultipleProfiles && library.id && (
+                      <div className="mt-2 flex items-center gap-2">
+                        {renamingId === library.id ? (
+                          <>
+                            <input
+                              aria-label="Rename profile"
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") commitRename(); }}
+                              maxLength={30}
+                              className="bg-surface-low border border-outline-variant px-2 py-1 text-sm text-on-surface"
+                            />
+                            <button type="button" onClick={commitRename} className="font-label text-[10px] uppercase tracking-widest text-primary">
+                              Save
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button type="button" onClick={() => beginRename(library.id, library.name)} className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface">
+                              Rename
+                            </button>
+                            {collection.libraries.length > 1 && (
+                              <button type="button" onClick={() => handleDeleteProfile(library.id, library.name)} className="font-label text-[10px] uppercase tracking-widest text-error">
+                                Delete
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={handleManualRegen}

@@ -131,6 +131,26 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("creates and switches local taste profiles", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Upload Favorites" }).click();
+  await expect(page.getByRole("button", { name: "My Profile" })).toBeVisible();
+
+  await page.getByRole("button", { name: "New Profile" }).click();
+  await page.getByLabel("Profile name").fill("Street");
+  await page.getByRole("button", { name: "Create Profile" }).click();
+
+  await expect(page.getByRole("button", { name: "Street" })).toHaveAttribute("aria-pressed", "true");
+
+  const state = await page.evaluate(() => {
+    const raw = window.localStorage.getItem("cs-taste-libraries");
+    return raw ? JSON.parse(raw) : null;
+  });
+  expect(state.libraries.map((library: { name: string }) => library.name)).toEqual(["My Profile", "Street"]);
+  expect(state.activeId).toBe(state.libraries[1].id);
+});
+
 test("cull, correction, and star signals are persisted with mocked APIs", async ({ page }) => {
   await uploadAndCullTwoPhotos(page);
 
