@@ -8,13 +8,13 @@ This is a **portfolio project** targeting a Solutions Architect, Applied AI (Cre
 
 ## Current State
 
-Two artifacts exist:
+The Next.js app is built and live in production at https://contact-sheet-three.vercel.app. The current component tree includes `components/ContactSheet.tsx`, focused UI components for the grid/detail/modals/sidebar, and server routes for hosted-key free/pro model calls.
 
-1. **`contact-sheet-artifact.jsx`** — A working single-file React artifact that runs inside Claude's artifact environment. Fully functional prototype with the complete two-pass architecture. Use this as the interactive reference spec.
+Phase F reframed the second pass from Deep Review to **Develop Shortlist** with **Editor's Notes** output. Phase 1 local multi-profile taste profiles is merged on `main`: local v2 taste-library collections, named profiles, active-profile switching at cull time, per-profile favorites/profile regeneration, and profile-scoped corrections.
 
-2. **`/app`, `/lib`, `/components`** — A partially scaffolded Next.js project. The entire lib layer is complete (types, providers, prompts, EXIF, resize, storage, exports, constants, API orchestration). The ProviderSetup component is done. **What's missing: the main `ContactSheet.tsx` component and a few remaining UI components.**
+The current cleanup/security pass adds shared request guardrails for hosted-key routes. The next product phase is persistent Pro taste profiles: Clerk manifest, private Vercel Blob collection storage, private image upload/resolve/delete routes, and local-to-server migration. This is documented in `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`.
 
-## Architecture — Two-Pass Cull/Deep Review
+## Architecture — Two-Pass Cull/Develop Shortlist
 
 This is the core design decision. Photographers dump hundreds of photos and want fast triage, not a 10-minute wait for detailed essays on every frame.
 
@@ -25,23 +25,25 @@ This is the core design decision. Photographers dump hundreds of photos and want
 - Output tokens per photo: ~30-50 (minimal)
 - This is the "sort my SD card" mode
 
-### Pass 2 — Deep Review (rich, selective)
+### Pass 2 — Develop Shortlist (rich, selective)
 - Only runs on **user-selected photos** (auto-selects HERO + SELECT after cull, user can toggle any photo in/out)
 - Full **1024px** images
 - Batches of **12 photos** per API call  
-- Each photo gets: four-dimension scores (Impact/Composition/Technical/Style & Story), evocative title, written technical critique, style & story critique, verdict
-- Also produces: curatorial notes for the set, recommended narrative sequence
+- Each photo gets: editorial role, edit direction, crop/composition guidance, written critique, verdict, and a secondary editor's score
+- Also produces: Editor's Notes for the set and recommended narrative sequence
 - Output tokens per photo: ~200+ (rich)
 
 ### Why This Matters
 - 200 photos culled in ~90 seconds, maybe $0.10 in API cost
-- Deep review on 20 selects adds another ~30 seconds, ~$0.05
+- Develop Shortlist on 20 selects adds another ~30 seconds, ~$0.05
 - Total: under $0.20 for a full session vs $1-2 if every photo got the full treatment
-- Users can skip deep review entirely if they just need the sort
+- Users can skip Develop Shortlist entirely if they just need the sort
 
 ## Multi-Provider BYOK
 
-Users bring their own API key. No server-side key, no billing infrastructure needed.
+Users can bring their own API key. This mode needs no server-side key or billing infrastructure.
+
+The shipped app also has hosted-key Free/Pro routes for users who do not bring their own key. Those routes are guarded by the shared cleanup/security pass; BYOK remains the direct-provider path.
 
 ### Supported Providers
 
@@ -55,7 +57,7 @@ Users bring their own API key. No server-side key, no billing infrastructure nee
 
 `lib/providers.ts` has a unified `callProvider()` function that takes a provider name, API key, model, and a message object, then formats the request correctly for each provider. The prompts are model-agnostic — only the request/response shape changes.
 
-All API calls go **directly from the browser to the provider** — no server proxy needed. Keys live in localStorage, never touch any server.
+BYOK API calls go **directly from the browser to the provider** — no server proxy needed. Keys live in localStorage, never touch any server.
 
 ### Onboarding Flow
 
@@ -131,7 +133,7 @@ All exports generate metadata or scripts that work alongside the photographer's 
 - One `.xmp` file per analyzed photo
 - Star ratings mapped from tier (HERO=5★, SELECT=4★, MAYBE=2★, CUT=1★)
 - Color labels (Winner, Second, Approved, Rejected)
-- Title (from deep review), description (full critique), keywords
+- Title and editorial metadata from Develop Shortlist, description/critique, keywords
 - Lightroom/Bridge/Capture One read these automatically
 
 ### Organization Scripts
@@ -152,92 +154,67 @@ contact-sheet/
 ├── app/
 │   ├── layout.tsx              # Root layout, metadata, font imports
 │   ├── page.tsx                # Client component wrapper (dynamic import, ssr: false)
-│   └── globals.css             # Design system — CSS variables, fonts, animations
+│   ├── globals.css             # Design system — CSS variables, fonts, animations
+│   └── api/                    # Hosted-key model routes and billing/webhook routes
 ├── components/
-│   ├── ContactSheet.tsx        # ⚠️ NEEDS TO BE BUILT — main app component
-│   │                           # Port from contact-sheet-artifact.jsx
-│   │                           # Should import from lib/ modules instead of inline
+│   ├── ContactSheet.tsx        # Main workflow shell and state machine
+│   ├── Header.tsx              # Top-level app controls
+│   ├── Sidebar.tsx             # Tier/profile/sidebar controls
+│   ├── PhotoGrid.tsx           # Thumbnail grid, overlays, selection controls
+│   ├── DetailPanel.tsx         # Persistent analysis/editor notes panel
+│   ├── CullBanner.tsx          # Post-cull CTA and summary
+│   ├── CompareModal.tsx        # Side-by-side comparison
+│   ├── ExportModal.tsx         # XMP, org scripts, manifest export
+│   ├── SessionsModal.tsx       # Session history and restore
+│   ├── SeedUploadModal.tsx     # Taste-profile seed uploads
+│   ├── EmptyState.tsx          # Drop zone and first-run state
 │   └── ProviderSetup.tsx       # BYOK onboarding — provider selection, key input
 ├── lib/
-│   ├── types.ts                # All TypeScript interfaces, provider info config
+│   ├── types.ts                # TypeScript interfaces and provider info config
 │   ├── providers.ts            # Multi-provider adapter (Anthropic, OpenAI, Gemini)
-│   ├── api.ts                  # Cull, deep review, compare orchestration
-│   ├── prompts.ts              # All system prompts + experience voice modifiers
+│   ├── api.ts                  # Cull, develop shortlist, compare orchestration
+│   ├── prompts.ts              # System prompts + experience voice modifiers
 │   ├── exif.ts                 # EXIF parser + formatters
-│   ├── resize.ts               # Image resize (1024px), downsize for cull (512px), thumbnails
+│   ├── resize.ts               # Image resize, downsize for cull, thumbnails
 │   ├── storage.ts              # localStorage: provider config + session persistence
+│   ├── taste-library.ts        # Local multi-profile taste profile state
+│   ├── request-guards.ts       # Shared hosted-key route guard helpers
 │   ├── exports.ts              # XMP sidecar, org script, manifest generators
 │   └── constants.ts            # Rating config, score dimensions, batch sizes
-├── contact-sheet-artifact.jsx  # Working prototype — use as reference spec
 ├── package.json
 ├── tsconfig.json
-└── next.config.js
+└── next.config.ts
 ```
 
-## What Needs to Be Built
+## What Needs to Be Built Next
 
-### 1. `components/ContactSheet.tsx` (the big one)
+### 1. Production Smoke for Phase 1
 
-Port the main component from `contact-sheet-artifact.jsx`. It contains:
+- Create a new named profile and confirm typing does not lose focus.
+- Seed the new profile and confirm View Profile shows favorites under that profile, not `My Profile`.
+- Switch between profiles in the modal and at cull time.
+- Cull once with each active profile and confirm the selected profile influences request/profile context.
+- Star and correct a frame, then confirm View Profile only shows signals for the active profile.
 
-- **State management**: photos, cullResults, deepResults, deepSelected set, phase tracking, UI state
-- **Phase machine**: empty → uploading → culling → culled → reviewing → reviewed
-- **File handling**: drag-and-drop (including folder recursion via webkitGetAsEntry), file picker, folder picker
-- **Toolbar**: all the action buttons, view/sort/filter toggles, experience level selector
-- **Photo grid**: thumbnails with rating badges, scores, EXIF lines, compare checkboxes, deep review toggles
-- **Detail panel**: persistent right-side panel (420px) with full analysis, EXIF bar, score bars
-- **Cull banner**: appears after cull with count of auto-selected photos, CTA to deep review
-- **Compare modal**: side-by-side with API comparison call
-- **Export modal**: XMP, org scripts (with rename toggle + preview), manifest
-- **Session history modal**: list of previous sessions, restore/delete
-- **Empty state**: drop zone, experience selector, previous sessions list
+### 2. Persistent Multi-Profile Taste Profiles
 
-Key difference from the artifact: instead of inline API calls and utility functions, import everything from `lib/`:
-```tsx
-import { runCull, runDeepReview, runCompare } from "@/lib/api";
-import { resizeImage, makeThumb } from "@/lib/resize";
-import { loadProviderConfig, saveProviderConfig, loadSessionIndex, saveSession, loadSession, deleteSession } from "@/lib/storage";
-import { generateXMP, generateOrgScript, generateManifest, downloadFile, sanitizeFilename } from "@/lib/exports";
-import { formatExifLine, formatExifCamera } from "@/lib/exif";
-import { RATING_CONFIG, SCORE_DIMENSIONS } from "@/lib/constants";
-```
+Build the Phase 2 persistence layer from `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`:
 
-Also needs to integrate `ProviderSetup` — show it when no provider config is saved, with a "Change provider" option in the header/settings.
+- Clerk `tasteProfileManifest`.
+- Private Vercel Blob collection JSON at `taste/{clerkUserId}/collection.json`.
+- Private image upload, resolve, and delete routes.
+- Pro sync and local-to-server migration.
+- Conflict handling with `updatedAt`.
 
-### 2. Consider Extracting Sub-Components
+### 3. Deterministic/Measured Photo Analysis
 
-The artifact has everything in one file. For the Next.js version, consider splitting:
-- `components/Thumbnail.tsx`
-- `components/DetailPanel.tsx`
-- `components/CompareModal.tsx`
-- `components/ExportModal.tsx`
-- `components/SessionHistory.tsx`
-- `components/CuratorialNotes.tsx`
-- `components/Toolbar.tsx`
+Add browser-side measured facts such as blur score, clipping, contrast, perceptual hashes, duplicate clusters, and EXIF risk flags before feeding those facts into cull prompts.
 
-This is optional — a single large `ContactSheet.tsx` works fine, but decomposition makes it easier to iterate on individual pieces.
+## Local Development
 
-### 3. README.md
-
-```markdown
-# Contact Sheet — AI Photo Editor
-
-Upload your photos. Get an expert edit.
-
-## Quick Start
-
+```bash
 npm install
 npm run dev
-
-## Setup
-
-No server-side API key needed. On first visit, pick your AI provider 
-(Anthropic, OpenAI, or Google) and enter your API key. It's stored 
-in your browser — never sent to our servers.
-
-## Deploy
-
-vercel --prod
 ```
 
 ## Design System
@@ -267,20 +244,21 @@ npm install
 vercel --prod
 ```
 
-No environment variables needed — all API keys come from the user's browser.
+BYOK works with user-supplied browser keys. Hosted Free/Pro model routes require the production environment variables used by the deployed app.
 
 ### Key Vercel Settings
 - Framework: Next.js (auto-detected)
 - Build command: `next build`
 - Output directory: `.next`
-- No serverless functions needed — everything runs client-side
+- Serverless API routes handle hosted-key cull, develop shortlist, compare, taste-profile, and override-description calls
 
 ## Session Persistence
 
 Sessions are stored in localStorage with this schema:
 - `cs-provider-config` → `{ provider, apiKey, model }`
 - `cs-session-index` → array of session summaries (last 20)
-- `cs-session:{uuid}` → full session data including cull results, deep results, curatorial notes, sequence, mini thumbnails (160px), EXIF data
+- `cs-session:{uuid}` → full session data including cull results, Develop Shortlist results, curatorial notes, sequence, mini thumbnails (160px), EXIF data
+- `cs-taste-libraries` → v2 local multi-profile taste library collection
 
 Restored sessions show scores and thumbnails but can't re-analyze or compare without re-uploading originals (base64 data is too large to persist).
 
@@ -290,6 +268,6 @@ Restored sessions show scores and thumbnails but can't re-analyze or compare wit
 2. **EXIF extraction**: Test with photos from different cameras — DSLR, mirrorless, phone
 3. **Multi-provider parity**: Same photos through Anthropic, OpenAI, Gemini — scores should be roughly comparable
 4. **Large batches**: 50+ photos — verify batching works, progress shows, no timeouts
-5. **Deep review quality**: Verify Learning mode explains concepts, Pro mode uses shorthand
+5. **Develop Shortlist quality**: Verify Editor's Notes, role, edit direction, sequencing, and Pro/Learning voice
 6. **Export integrity**: XMP files should load in Lightroom, org scripts should run without errors
 7. **Session restore**: Analyze, close browser, reopen — scores and thumbnails should persist
