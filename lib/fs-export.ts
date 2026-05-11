@@ -29,6 +29,20 @@ const RATING_FOLDERS: Record<string, string> = {
   CUT: "04_cuts",
 };
 
+export function createExportFolderName(now: Date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const stamp = [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+  ].join("-") + `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `contact-sheet-export-${stamp}`;
+}
+
+export function sidecarNameForFile(filename: string): string {
+  return `${filename.replace(/\.[^.]+$/, "")}.xmp`;
+}
+
 async function getOrCreateDir(
   parent: FileSystemDirectoryHandle,
   name: string,
@@ -68,29 +82,15 @@ export async function exportToFolder(opts: ExportOptions): Promise<number> {
     recommendedSequence, renameFiles = false, onProgress,
   } = opts;
 
-  // Prompt user to pick a directory
+  // Prompt user to pick a destination, then keep the export self-contained.
   const rootDir = await (window as any).showDirectoryPicker({ mode: "readwrite" });
+  const exportDir = await getOrCreateDir(rootDir, createExportFolderName());
 
   let written = 0;
   const total = photos.filter((_, i) => cullResults[i]).length;
 
-  // 1. Write XMP sidecars next to originals (in the root dir)
-  onProgress?.(`Writing XMP sidecars…`);
-  for (let i = 0; i < photos.length; i++) {
-    const cull = cullResults[i];
-    if (!cull) continue;
-    const deep = deepResults[i];
-    const override = ratingOverrides?.[i];
-    const baseName = photos[i].name.replace(/\.[^.]+$/, "");
-    const xmp = generateXMP(photos[i].name, cull, deep, override);
-    await writeTextFile(rootDir, `${baseName}.xmp`, xmp);
-    written++;
-    onProgress?.(`XMP sidecars: ${written}/${total}`);
-  }
-
-  // 2. Create organized folders and copy original files
-  const organizedDir = await getOrCreateDir(rootDir, "organized");
-  const byRatingDir = await getOrCreateDir(organizedDir, "by_rating");
+  // 1. Create organized folders and copy original files with matching sidecars.
+  const byRatingDir = await getOrCreateDir(exportDir, "by_rating");
 
   // Pre-create rating folders
   const ratingDirs: Record<string, FileSystemDirectoryHandle> = {};
@@ -120,28 +120,37 @@ export async function exportToFolder(opts: ExportOptions): Promise<number> {
     }
 
     await copyOriginalFile(destDir, destName, photo.originalFile);
+    const xmp = generateXMP(destName, cull, deepResults[i], ratingOverrides?.[i]);
+    await writeTextFile(destDir, sidecarNameForFile(destName), xmp);
+    written += 2;
     organized++;
     onProgress?.(`Organizing: ${organized}/${total}`);
   }
 
-  // 3. Create sequence folder if available
+  // 2. Create sequence folder if available.
   if (recommendedSequence?.length) {
     onProgress?.(`Creating sequence…`);
-    const seqDir = await getOrCreateDir(organizedDir, "sequence");
+    const seqDir = await getOrCreateDir(exportDir, "sequence");
     for (let n = 0; n < recommendedSequence.length; n++) {
       const idx = recommendedSequence[n];
       const photo = photos[idx];
       if (!photo?.originalFile) continue;
+      const cull = cullResults[idx];
+      if (!cull) continue;
       const pad = String(n + 1).padStart(3, "0");
       const ext = photo.name.split(".").pop() || "jpg";
       let destName = photo.name;
       if (renameFiles && deepResults[idx]?.title) {
         destName = `${sanitizeFilename(deepResults[idx].title)}.${ext}`;
       }
-      await copyOriginalFile(seqDir, `${pad}_${destName}`, photo.originalFile);
+      const sequencedName = `${pad}_${destName}`;
+      await copyOriginalFile(seqDir, sequencedName, photo.originalFile);
+      const xmp = generateXMP(sequencedName, cull, deepResults[idx], ratingOverrides?.[idx]);
+      await writeTextFile(seqDir, sidecarNameForFile(sequencedName), xmp);
+      written += 2;
     }
   }
 
-  onProgress?.(`Done — ${written} sidecars + ${organized} files organized`);
-  return written + organized;
+  onProgress?.(`Done — ${organized} originals with sidecars`);
+  return written;
 }

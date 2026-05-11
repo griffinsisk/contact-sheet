@@ -134,16 +134,16 @@ export default function ExportModal({ photos, cullResults, deepResults, ratingOv
 
             <div className="mt-4 p-5 bg-surface-low border-l-2 border-primary">
               <p className="font-body text-sm text-on-surface/80 leading-relaxed mb-3">
-                Pick your photo folder. We'll write directly into it:
+                Pick a destination. We'll create one export folder inside it:
               </p>
               <ul className="space-y-2">
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-[14px] text-primary mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
-                  <span className="font-label text-[11px] text-on-surface-variant">XMP sidecars next to each original — Lightroom picks them up automatically</span>
+                  <span className="font-label text-[11px] text-on-surface-variant">Photo copies and matching XMP sidecars stay together</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-[14px] text-primary mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
-                  <span className="font-label text-[11px] text-on-surface-variant">organized/ folder with files sorted by rating tier</span>
+                  <span className="font-label text-[11px] text-on-surface-variant">by_rating/ folders keep the delivery package contained</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-[14px] text-primary mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
@@ -188,9 +188,9 @@ export default function ExportModal({ photos, cullResults, deepResults, ratingOv
           >
             <div className="flex items-center gap-3">
               <span className="material-symbols-outlined text-[18px]">description</span>
-              XMP SIDECARS
+              XMP SIDECARS ONLY
             </div>
-            <span className="text-[10px] font-normal text-on-surface-variant">Lightroom / Capture One</span>
+            <span className="text-[10px] font-normal text-on-surface-variant">Manual placement</span>
           </button>
 
           <button

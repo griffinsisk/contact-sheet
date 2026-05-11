@@ -12,6 +12,8 @@ type ProgressFn = (message: string, batch: number, total: number) => void;
 
 type ProxyEndpoint = "cull" | "deep-review" | "compare";
 
+const CULL_RETRY_BATCH_SIZE = 4;
+
 type TasteProfileArg = {
   prose: string;
   aestheticTags: string[];
@@ -42,6 +44,15 @@ function chunkByCount<T>(items: T[], size: number): T[][] {
 
 function proxyTooLargeMessage(bytes: number): string {
   return `Hosted proxy request is too large (${Math.ceil(bytes / 1024 / 1024)} MB). Try fewer photos, or bring your own API key to bypass the hosted proxy.`;
+}
+
+function missingCullResult(index: number, photoName: string): CullResult {
+  return {
+    index,
+    score: 50,
+    rating: "MAYBE",
+    reason: `No model result was returned for ${photoName} after retry, so Contact Sheet marked it MAYBE for manual review.`,
+  };
 }
 
 /**
@@ -128,7 +139,12 @@ export async function runCull(
   profile: TasteProfileArg = null,
 ): Promise<Record<number, CullResult>> {
   const allResults: Record<number, CullResult> = {};
-  const batches: { photo: Photo; globalIndex: number }[][] = [];
+  type CullBatchItem = {
+    photo: Photo;
+    globalIndex: number;
+    image?: { base64: string; mediaType: string };
+  };
+  const batches: CullBatchItem[][] = [];
 
   for (let i = 0; i < photos.length; i += CULL_BATCH_SIZE) {
     batches.push(
@@ -152,10 +168,13 @@ export async function runCull(
       ...b,
       image: { base64: cullImages[i], mediaType: "image/jpeg" },
     }));
-    const makeCullTextParts = (items: typeof prepared) => items.map((b, i) =>
+    const makeCullTextParts = (items: CullBatchItem[]) => items.map((b, i) =>
       `[Photo ${i}: ${b.photo.name}${formatExifForPrompt(b.photo.exif)}]`
     );
-    const makeCullImages = (items: typeof prepared) => items.map(b => b.image);
+    const makeCullImages = (items: CullBatchItem[]) => items.map((b) => {
+      if (!b.image) throw new Error(`Cull image was not prepared for ${b.photo.name}`);
+      return b.image;
+    });
     const apiBatches = config
       ? [prepared]
       : splitByEstimatedProxyBytes(prepared, {
@@ -168,7 +187,7 @@ export async function runCull(
           }),
         });
 
-    for (const apiBatch of apiBatches) {
+    const runCullApiBatch = async (apiBatch: CullBatchItem[]): Promise<CullBatchItem[]> => {
       const images = makeCullImages(apiBatch);
       const textParts = makeCullTextParts(apiBatch);
       const libraryMatchesPromise = findLibraryMatches(images.map(img => img.base64), profile);
@@ -186,16 +205,45 @@ export async function runCull(
       const parsed = parseJSON(response.text, response.truncated) as CullResponse;
       const cullData = parsed.cull || [];
       const libraryMatches = await libraryMatchesPromise;
+      const returnedLocalIndices = new Set<number>();
 
       cullData.forEach(c => {
         const parsedIndex = Number(c.index);
-        const localIndex = Number.isInteger(parsedIndex) ? parsedIndex : 0;
-        const gIdx = apiBatch[localIndex]?.globalIndex ?? localIndex;
+        let localIndex: number | null = null;
+        if (Number.isInteger(parsedIndex)) {
+          localIndex = parsedIndex >= 0 && parsedIndex < apiBatch.length ? parsedIndex : null;
+        } else if (apiBatch.length === 1) {
+          localIndex = 0;
+        }
+        if (localIndex == null) return;
+        returnedLocalIndices.add(localIndex);
+        const gIdx = apiBatch[localIndex].globalIndex;
         allResults[gIdx] = applyProfileScoring(
           { ...c, index: gIdx },
           { hasProfile: !!profileForPrompt, libraryMatch: libraryMatches[localIndex] },
         );
       });
+
+      return apiBatch.filter((_, index) => !returnedLocalIndices.has(index));
+    };
+
+    for (const apiBatch of apiBatches) {
+      const missing = await runCullApiBatch(apiBatch);
+      if (missing.length === 0) continue;
+
+      onProgress?.(
+        `Rechecking ${missing.length} omitted photo${missing.length === 1 ? "" : "s"}…`,
+        bi,
+        batches.length,
+      );
+
+      const retryBatches = chunkByCount(missing, CULL_RETRY_BATCH_SIZE);
+      for (const retryBatch of retryBatches) {
+        const stillMissing = await runCullApiBatch(retryBatch);
+        stillMissing.forEach((item) => {
+          allResults[item.globalIndex] = missingCullResult(item.globalIndex, item.photo.name);
+        });
+      }
     }
   }
 

@@ -274,6 +274,58 @@ test("cull uses the selected active taste profile", async ({ page }) => {
   await expect.poll(() => Promise.resolve(requests[0]?.profile?.prose)).toBe("hard light public moments");
 });
 
+test("cull retries omitted photos instead of leaving them loading", async ({ page }) => {
+  await page.unroute("**/api/cull");
+  let cullCalls = 0;
+  await page.route("**/api/cull", async (route) => {
+    cullCalls++;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        text: JSON.stringify({
+          cull: cullCalls === 1
+            ? [
+                {
+                  index: 0,
+                  score: 72,
+                  rating: "SELECT",
+                  scores: { impact: 74, composition: 72, rawQuality: 80, craftExecution: 70, story: 62 },
+                  reason: "Clean color field with enough graphic impact for a first-pass select.",
+                },
+              ]
+            : [
+                {
+                  index: 0,
+                  score: 61,
+                  rating: "MAYBE",
+                  scores: { impact: 58, composition: 62, rawQuality: 78, craftExecution: 65, story: 45 },
+                  reason: "Retry result returned for the omitted blue frame.",
+                },
+              ],
+        }),
+        truncated: false,
+      }),
+    });
+  });
+
+  await page.goto("/");
+
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Pick Files" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles([
+    { name: "red-dot.png", mimeType: "image/png", buffer: RED_DOT_PNG },
+    { name: "blue-dot.png", mimeType: "image/png", buffer: BLUE_DOT_PNG },
+  ]);
+
+  await page.getByRole("button", { name: /Mixed/ }).click();
+  await page.getByRole("button", { name: /START CULL/i }).click();
+
+  await expect(page.getByRole("button", { name: /red-dot\.png, SELECT, score 72/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /blue-dot\.png, MAYBE, score 60/ })).toBeVisible();
+  expect(cullCalls).toBe(2);
+});
+
 test("cull, correction, and star signals are persisted with mocked APIs", async ({ page }) => {
   await uploadAndCullTwoPhotos(page);
 
