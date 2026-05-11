@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import sharp from "sharp";
 import { callProvider } from "@/lib/providers";
+import {
+  assertStringField,
+  readGuardedJson,
+  REQUEST_GUARD_LIMITS,
+  type GuardFailure,
+} from "@/lib/request-guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -14,6 +20,18 @@ Examples:
 - Two people seated at cafe table, backlit, candid mid-conversation, shallow depth
 
 Respond with ONLY the description. No preamble, no quotes, no markdown.`;
+
+function guardResponse(failure: GuardFailure) {
+  return NextResponse.json(
+    { error: failure.error },
+    {
+      status: failure.status,
+      headers: failure.retryAfterSeconds
+        ? { "Retry-After": String(failure.retryAfterSeconds) }
+        : undefined,
+    },
+  );
+}
 
 function decodeBase64Image(image: string): { buffer: Buffer; mediaType: string } | null {
   const dataUrlMatch = image.match(/^data:(image\/[a-zA-Z+]+);base64,(.*)$/);
@@ -58,13 +76,16 @@ export async function POST(req: NextRequest) {
   }
   const model = process.env.ANTHROPIC_DESCRIBE_MODEL || "claude-haiku-4-5-20251001";
 
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const guarded = await readGuardedJson(req, "overrideDescribe");
+  if (!guarded.ok) return guardResponse(guarded);
+  const body: any = guarded.value;
 
+  const imageLimit = assertStringField(body, {
+    field: "image",
+    label: "image (base64)",
+    maxLength: REQUEST_GUARD_LIMITS.overrideDescribe.maxBodyBytes,
+  });
+  if (!imageLimit.ok) return guardResponse(imageLimit);
   if (typeof body?.image !== "string" || body.image.length === 0) {
     return NextResponse.json({ error: "Body must include image (base64)" }, { status: 400 });
   }

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callProvider } from "@/lib/providers";
 import { COMPARE_PROMPT } from "@/lib/prompts";
+import {
+  assertArrayLimit,
+  readGuardedJson,
+  REQUEST_GUARD_LIMITS,
+  type GuardFailure,
+} from "@/lib/request-guards";
 
 // Server-side compare endpoint for the free + pro tiers.
 //
@@ -9,6 +15,18 @@ import { COMPARE_PROMPT } from "@/lib/prompts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+function guardResponse(failure: GuardFailure) {
+  return NextResponse.json(
+    { error: failure.error },
+    {
+      status: failure.status,
+      headers: failure.retryAfterSeconds
+        ? { "Retry-After": String(failure.retryAfterSeconds) }
+        : undefined,
+    },
+  );
+}
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -20,12 +38,9 @@ export async function POST(req: NextRequest) {
   }
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
 
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const guarded = await readGuardedJson(req, "compare");
+  if (!guarded.ok) return guardResponse(guarded);
+  const body: any = guarded.value;
 
   const { images, textParts, maxTokens = 1000 } = body ?? {};
   if (!Array.isArray(images) || !Array.isArray(textParts)) {
@@ -34,6 +49,21 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  const expectedItems = REQUEST_GUARD_LIMITS.compare.maxImages ?? 2;
+  const imagesLimit = assertArrayLimit(body, {
+    field: "images",
+    label: "images",
+    min: expectedItems,
+    max: expectedItems,
+  });
+  if (!imagesLimit.ok) return guardResponse(imagesLimit);
+  const textPartsLimit = assertArrayLimit(body, {
+    field: "textParts",
+    label: "textParts",
+    min: expectedItems,
+    max: expectedItems,
+  });
+  if (!textPartsLimit.ok) return guardResponse(textPartsLimit);
 
   try {
     const response = await callProvider("anthropic", apiKey, model, {

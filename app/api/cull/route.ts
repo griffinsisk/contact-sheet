@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callProvider } from "@/lib/providers";
 import { buildCullPrompt } from "@/lib/prompts";
+import {
+  assertArrayLimit,
+  readGuardedJson,
+  REQUEST_GUARD_LIMITS,
+  type GuardFailure,
+} from "@/lib/request-guards";
 import { SessionIntent, IntentPreset } from "@/lib/types";
 
 // Server-side cull endpoint for the free + pro tiers. BYOK users call
@@ -16,6 +22,18 @@ const VALID_PRESETS: IntentPreset[] = [
   "documentary", "street", "film", "wildlife",
   "landscape", "portrait", "events", "mixed",
 ];
+
+function guardResponse(failure: GuardFailure) {
+  return NextResponse.json(
+    { error: failure.error },
+    {
+      status: failure.status,
+      headers: failure.retryAfterSeconds
+        ? { "Retry-After": String(failure.retryAfterSeconds) }
+        : undefined,
+    },
+  );
+}
 
 function coerceIntent(raw: unknown): SessionIntent | null {
   if (!raw || typeof raw !== "object") return null;
@@ -47,12 +65,9 @@ export async function POST(req: NextRequest) {
   }
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
 
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const guarded = await readGuardedJson(req, "cull");
+  if (!guarded.ok) return guardResponse(guarded);
+  const body: any = guarded.value;
 
   const { images, textParts, maxTokens = 4096 } = body ?? {};
   if (!Array.isArray(images) || !Array.isArray(textParts)) {
@@ -61,6 +76,11 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  const maxImages = REQUEST_GUARD_LIMITS.cull.maxImages ?? 20;
+  const imagesLimit = assertArrayLimit(body, { field: "images", label: "images", max: maxImages });
+  if (!imagesLimit.ok) return guardResponse(imagesLimit);
+  const textPartsLimit = assertArrayLimit(body, { field: "textParts", label: "textParts", max: maxImages });
+  if (!textPartsLimit.ok) return guardResponse(textPartsLimit);
 
   const intent = coerceIntent(body?.intent);
 

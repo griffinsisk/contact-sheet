@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import sharp from "sharp";
 import { callProvider } from "@/lib/providers";
+import {
+  assertArrayLimit,
+  readGuardedJson,
+  REQUEST_GUARD_LIMITS,
+  type GuardFailure,
+} from "@/lib/request-guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -59,6 +65,18 @@ Bad tags: cinematic (vague), moody (marketing), good_light (not a preference), p
 
 Respond ONLY with valid JSON (no markdown, no backticks):
 {"aestheticTags": ["tag_one", "tag_two"]}`;
+
+function guardResponse(failure: GuardFailure) {
+  return NextResponse.json(
+    { error: failure.error },
+    {
+      status: failure.status,
+      headers: failure.retryAfterSeconds
+        ? { "Retry-After": String(failure.retryAfterSeconds) }
+        : undefined,
+    },
+  );
+}
 
 interface RawEntry {
   photoHash: string;
@@ -171,13 +189,16 @@ export async function POST(req: NextRequest) {
   }
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
 
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const guarded = await readGuardedJson(req, "tasteProfile");
+  if (!guarded.ok) return guardResponse(guarded);
+  const body: any = guarded.value;
 
+  const entriesLimit = assertArrayLimit(body, {
+    field: "entries",
+    label: "entries",
+    max: REQUEST_GUARD_LIMITS.tasteProfile.maxEntries ?? 30,
+  });
+  if (!entriesLimit.ok) return guardResponse(entriesLimit);
   const entries = coerceEntries(body?.entries);
   if (!entries) {
     return NextResponse.json(
