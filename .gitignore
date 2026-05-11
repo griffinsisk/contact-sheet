@@ -33,3 +33,9 @@ _personal/
 
 # Local Claude Code config
 .claude/
+
+# Local implementation worktrees
+.worktrees/
+
+# clerk configuration (can include secrets)
+/.clerk/
