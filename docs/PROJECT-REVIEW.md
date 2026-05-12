@@ -8,6 +8,7 @@ Portfolio project for an Anthropic SA (Creatives) role. AI photo culling tool us
 - **AI workflow**: Cull remains the decision engine. The second pass is now **Develop Shortlist**, producing **Editor's Notes** rather than a competing score-first review.
 - **Taste profiles**: Phase 1 local multi-profile support is merged: v2 localStorage collection migration, named local profiles, active-profile switching, profile-scoped favorites/profile regeneration, and correction scoping.
 - **Hosted-key routes**: Free/pro server routes use the hosted Anthropic key and now have baseline shared server-side guardrails from the cleanup/security pass.
+- **Cull/export closeout**: Cull retries omitted model indices instead of leaving cards loading, and folder export now creates a contained package with copied photos and matching `.xmp` sidecars together under `by_rating/`.
 
 ---
 
@@ -32,7 +33,7 @@ The cull → Develop Shortlist pipeline is well-designed:
 Reading EXIF from the ArrayBuffer BEFORE canvas resize (which strips metadata) is the right approach. No library dependency is a nice touch for a client-side tool.
 
 ### 4. Export System
-XMP sidecars + organization scripts is genuinely useful for photographers. Never re-encodes photos. This shows real Lightroom workflow understanding.
+XMP sidecars + organization scripts is genuinely useful for photographers. The primary folder export now creates a contained `contact-sheet-export-*` package where copied originals and matching sidecars stay together by rating tier. It never re-encodes photos. This shows real Lightroom workflow understanding.
 
 ### 5. JSON Truncation Repair
 Pragmatic approach to handling max_tokens truncation — finds the last complete object and patches the JSON structure. Not elegant but it works.
@@ -63,7 +64,7 @@ You support Anthropic, OpenAI, and Gemini. For an Anthropic SA role, this:
 **What to consider**: Keep multi-provider as an option, but make Anthropic the clear star. Add Claude-specific features that the others can't do — e.g., use extended thinking for Develop Shortlist nuance, or expand or revisit prompt caching where prompt stability allows.
 
 ### 5. Incomplete Failure-Path UX and Recovery
-The current app has user-facing error states for cull, Develop Shortlist, compare, restored-session limitations, unsupported files, and tier gates. That baseline is useful, but recovery is still thin when provider or route failures happen mid-workflow.
+The current app has user-facing error states for cull, Develop Shortlist, compare, restored-session limitations, unsupported files, and tier gates. Cull now handles omitted provider items with a retry and conservative `MAYBE` fallback, which closes the visible stuck-loading bug. Broader recovery is still thin when provider or route failures happen mid-workflow.
 
 **What to do**: Add per-batch recovery so one failed batch does not kill the whole run, retry/backoff for provider and rate-limit failures, clearer route-guard/rate-limit messages, and tests for bad key, rate limit, and oversized batch paths.
 
@@ -77,7 +78,7 @@ The project now has unit and e2e coverage for scoring, exports, provider parsing
 
 ## Priority Order for the Next Public Iteration
 
-1. **Run Phase 1 production smoke** — verify multi-profile flows on the live Vercel app.
+1. **Run production smoke** — verify multi-profile flows and the contained export package on the live Vercel app.
 2. **Build Phase 2 persistence** — Clerk manifest plus private Vercel Blob sync for Pro taste profiles.
 3. **Follow up on route guard hardening as needed** — add distributed rate limiting, confirm platform body limits, and broaden route handler tests.
 4. **Add deterministic technical metrics** — blur, clipping, contrast, duplicate clusters, and EXIF risk flags.

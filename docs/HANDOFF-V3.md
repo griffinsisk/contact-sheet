@@ -12,7 +12,7 @@ The Next.js app is built and live in production at https://contact-sheet-three.v
 
 Phase F reframed the second pass from Deep Review to **Develop Shortlist** with **Editor's Notes** output. Phase 1 local multi-profile taste profiles is merged on `main`: local v2 taste-library collections, named profiles, active-profile switching at cull time, per-profile favorites/profile regeneration, and profile-scoped corrections.
 
-The current cleanup/security pass adds shared request guardrails for hosted-key routes. The next product phase is persistent Pro taste profiles: Clerk manifest, private Vercel Blob collection storage, private image upload/resolve/delete routes, and local-to-server migration. This is documented in `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`.
+The cleanup/security pass added shared request guardrails for hosted-key routes. The latest closeout fix also made cull completion resilient to omitted model indices and changed folder export to create one contained delivery package with photo + `.xmp` pairs. The next product phase is persistent Pro taste profiles: Clerk manifest, private Vercel Blob collection storage, private image upload/resolve/delete routes, and local-to-server migration. This is documented in `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`.
 
 ## Architecture — Two-Pass Cull/Develop Shortlist
 
@@ -134,7 +134,15 @@ All exports generate metadata or scripts that work alongside the photographer's 
 - Star ratings mapped from tier (HERO=5★, SELECT=4★, MAYBE=2★, CUT=1★)
 - Color labels (Winner, Second, Approved, Rejected)
 - Title and editorial metadata from Develop Shortlist, description/critique, keywords
+- Keywords include `ContactSheet`, the final rating, `Score:<score>`, and `HumanOverride` when the user corrected the AI rating
 - Lightroom/Bridge/Capture One read these automatically
+
+### Folder Export Package
+- Primary export creates `contact-sheet-export-YYYY-MM-DD-HHMMSS/` inside the chosen destination
+- Files are copied into `by_rating/01_heroes`, `02_selects`, `03_maybes`, and `04_cuts`
+- Each copied original has its matching `.xmp` sidecar next to it, so catalog apps can import the pair together
+- If a sequence exists, `sequence/` contains numbered photo copies with matching sidecars
+- The separate `XMP SIDECARS ONLY` download remains for manual sidecar placement next to originals
 
 ### Organization Scripts
 - `.sh` (Mac/Linux) or `.bat` (Windows)
@@ -195,6 +203,7 @@ contact-sheet/
 - Switch between profiles in the modal and at cull time.
 - Cull once with each active profile and confirm the selected profile influences request/profile context.
 - Star and correct a frame, then confirm View Profile only shows signals for the active profile.
+- Export a small culled set and confirm the contained `contact-sheet-export-*` folder has photo + `.xmp` pairs under `by_rating/`.
 
 ### 2. Persistent Multi-Profile Taste Profiles
 

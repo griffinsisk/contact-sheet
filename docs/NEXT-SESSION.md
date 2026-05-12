@@ -1,13 +1,14 @@
 # Next Session — Production Smoke / Phase 2 Persistence
 
-**Updated:** 2026-05-09
-**Current branch:** `feature/shipping-cleanup-route-hardening`
-**Production:** https://contact-sheet-three.vercel.app — returned HTTP 200 after Phase 1 merge
+**Updated:** 2026-05-12
+**Current branch:** `main`
+**Production:** https://contact-sheet-three.vercel.app — returned HTTP 200 after latest deploy
+**Latest pushed commit:** `57b5da8 fix: complete cull and export outputs`
 **Current cleanup spec:** `docs/superpowers/specs/2026-05-09-shipping-cleanup-route-hardening-design.md`
 **Current cleanup plan:** `docs/superpowers/plans/2026-05-09-shipping-cleanup-route-hardening.md`
 **Phase 2 persistence spec:** `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`
 
-The Next.js app is built and live. Phase F Develop Shortlist / Editor's Notes is merged, and Phase 1 local multi-profile taste profiles is merged on `main`. The current branch implements shipping cleanup plus shared-key route hardening before the next product phase.
+The Next.js app is built and live. Phase F Develop Shortlist / Editor's Notes is merged, Phase 1 local multi-profile taste profiles is merged, shared-key route hardening is deployed, and the cull/export closeout fixes are deployed on `main`.
 
 Clerk manifest, private Vercel Blob storage, private image resolution, and cross-device sync are deliberately deferred to Phase 2.
 
@@ -16,30 +17,23 @@ Clerk manifest, private Vercel Blob storage, private image resolution, and cross
 - Phase F reframed the second pass from Deep Review to **Develop Shortlist** with **Editor's Notes**.
 - Phase 1 local multi-profile shipped named local profiles, v2 localStorage collection migration, active-profile switching at cull time, per-profile favorites/profile regeneration, and `profileIdAtCull` correction scoping.
 - Free/pro hosted-key model routes now have shared request guardrails for `/api/cull`, `/api/deep-review`, `/api/compare`, `/api/taste-profile`, and `/api/override-describe`.
+- Cull no longer leaves omitted model results in a permanent thumbnail-loading state. Missing cull indices are retried once in smaller batches; if still missing, the photo receives a conservative `MAYBE` result with a manual-review note.
+- Folder export now creates one contained `contact-sheet-export-YYYY-MM-DD-HHMMSS/` package. Photos and matching `.xmp` sidecars stay together inside `by_rating/` folders, and sequence exports include both copied photo and matching sidecar. The standalone XMP download remains available as `XMP SIDECARS ONLY` for manual placement.
 - Manual production smoke for the Phase 1 multi-profile flow is still pending.
 
 ## Recent Verification
 
-Phase 1 merge verification:
+Latest closeout verification on `main`:
 
 ```bash
 npm run typecheck      # passed
-npm run test:unit      # 34 passed
-npm run test:e2e       # 10 passed
-npm run build          # passed
-npm test               # passed: unit + e2e
-```
-
-Shipping cleanup / route-hardening verification on `feature/shipping-cleanup-route-hardening`:
-
-```bash
-npm run typecheck      # passed
-npm run test:unit      # 50 passed
+npm run test:unit      # 53 passed
+npm run test:e2e       # 11 passed
 npm run build          # passed with required local build env:
                        # STRIPE_SECRET_KEY=sk_test_dummy
                        # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<valid test-format key>
-npm run test:e2e       # 10 passed
-stale-doc rg scan      # no matches
+curl -I https://contact-sheet-three.vercel.app
+                       # HTTP/2 200 after Vercel deploy success
 ```
 
 ## Next Steps
@@ -50,6 +44,7 @@ stale-doc rg scan      # no matches
    - Switch between profiles in the modal and at cull time.
    - Cull once with each active profile and confirm the selected profile influences the request/profile context.
    - Star and correct a frame, then confirm View Profile only shows signals for the active profile.
+   - Export a small culled set and confirm the destination contains one `contact-sheet-export-*` folder with photo + `.xmp` pairs under `by_rating/`.
 2. Start Phase 2 persistence after production smoke:
    - Clerk `tasteProfileManifest`.
    - Private Vercel Blob `taste/{clerkUserId}/collection.json`.
