@@ -11,8 +11,6 @@ interface Props {
 
 const PROVIDER_ICONS: Record<Provider, string> = {
   anthropic: "auto_awesome",
-  openai: "psychology",
-  gemini: "cloud",
 };
 
 export default function ProviderSetup({ onSave, initial, onCancel }: Props) {
@@ -38,16 +36,6 @@ export default function ProviderSetup({ onSave, initial, onCancel }: Props) {
 
     if (provider === "anthropic" && !apiKey.startsWith("sk-ant-")) {
       setError("Anthropic keys start with sk-ant-. Check your key.");
-      setTesting(false);
-      return;
-    }
-    if (provider === "openai" && !apiKey.startsWith("sk-")) {
-      setError("OpenAI keys start with sk-. Check your key.");
-      setTesting(false);
-      return;
-    }
-    if (provider === "gemini" && !apiKey.startsWith("AIza")) {
-      setError("Gemini keys start with AIza. Check your key.");
       setTesting(false);
       return;
     }

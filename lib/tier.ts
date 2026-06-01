@@ -4,8 +4,8 @@ import { ProviderConfig } from "./types";
 //
 // Three modes a user can be in when running the app:
 //
-//   byok  — they've pasted their own Anthropic/OpenAI/Gemini key. Calls
-//           bypass our server entirely; they pay their own API bill.
+//   byok  — they've pasted their own Anthropic key. Calls bypass our
+//           server entirely; they pay their own API bill.
 //   free  — no key, no paid account. Uses our /api proxy with a shared
 //           server-side Anthropic key, capped at FREE_TIER_LIMIT photos
 //           per browser session (localStorage counter — v1 honor-system).
