@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
+  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
   const guarded = await readGuardedJson(req, "deepReview");
   if (!guarded.ok) return guardResponse(guarded);

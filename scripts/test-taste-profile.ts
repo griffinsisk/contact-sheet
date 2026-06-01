@@ -175,7 +175,7 @@ async function main() {
 
   const env = { ...loadEnvLocal(), ...process.env };
   const apiKey = env.ANTHROPIC_API_KEY;
-  const model = env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
+  const model = env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
   if (!apiKey) {
     console.error("ANTHROPIC_API_KEY not found in .env.local or environment");
     process.exit(1);
