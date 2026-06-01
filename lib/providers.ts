@@ -14,9 +14,8 @@ interface Message {
    * When true, wraps the system prompt in Anthropic's prompt-cache block.
    * The first call writes the cache (~25% input-token cost premium on the
    * cached tokens); subsequent calls within the 5-min TTL read it at ~10%
-   * cost. Only applied on the Anthropic path; no-op for other providers.
-   * Only meaningful server-side where the system prompt is stable across
-   * calls — BYOK batches vary too much to cache reliably.
+   * cost. Only meaningful server-side where the system prompt is stable
+   * across calls — BYOK batches vary too much to cache reliably.
    */
   cacheSystem?: boolean;
 }
@@ -80,94 +79,6 @@ async function callAnthropic(apiKey: string, model: string, msg: Message): Promi
   return { text, truncated: data.stop_reason === "max_tokens" };
 }
 
-// ── OpenAI ───────────────────────────────────────────────────────────────────
-
-async function callOpenAI(apiKey: string, model: string, msg: Message): Promise<ProviderResponse> {
-  const content: any[] = [];
-  msg.images.forEach((img, i) => {
-    content.push({
-      type: "image_url",
-      image_url: { url: `data:${img.mediaType};base64,${img.base64}`, detail: "low" },
-    });
-    if (msg.textParts[i]) content.push({ type: "text", text: msg.textParts[i] });
-  });
-  for (let i = msg.images.length; i < msg.textParts.length; i++) {
-    content.push({ type: "text", text: msg.textParts[i] });
-  }
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: msg.maxTokens,
-      temperature: 0,
-      messages: [
-        { role: "system", content: msg.system },
-        { role: "user", content },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`OpenAI ${res.status}: ${body.slice(0, 200)}`);
-  }
-
-  const data = await res.json();
-  if (data.error) throw new Error(`OpenAI: ${data.error?.message || JSON.stringify(data.error)}`);
-
-  const text = data.choices?.[0]?.message?.content || "";
-  const truncated = data.choices?.[0]?.finish_reason === "length";
-  return { text, truncated };
-}
-
-// ── Gemini ───────────────────────────────────────────────────────────────────
-
-async function callGemini(apiKey: string, model: string, msg: Message): Promise<ProviderResponse> {
-  const parts: any[] = [{ text: msg.system + "\n\n" }];
-
-  msg.images.forEach((img, i) => {
-    parts.push({
-      inlineData: { mimeType: img.mediaType, data: img.base64 },
-    });
-    if (msg.textParts[i]) parts.push({ text: msg.textParts[i] });
-  });
-  for (let i = msg.images.length; i < msg.textParts.length; i++) {
-    parts.push({ text: msg.textParts[i] });
-  }
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: {
-        temperature: 0,
-        maxOutputTokens: msg.maxTokens,
-        responseMimeType: "application/json",
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Gemini ${res.status}: ${body.slice(0, 200)}`);
-  }
-
-  const data = await res.json();
-  if (data.error) throw new Error(`Gemini: ${data.error?.message || JSON.stringify(data.error)}`);
-
-  const text = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") || "";
-  const truncated = data.candidates?.[0]?.finishReason === "MAX_TOKENS";
-  return { text, truncated };
-}
-
 // ── Unified call ─────────────────────────────────────────────────────────────
 
 export async function callProvider(
@@ -178,8 +89,6 @@ export async function callProvider(
 ): Promise<ProviderResponse> {
   switch (provider) {
     case "anthropic": return callAnthropic(apiKey, model, msg);
-    case "openai": return callOpenAI(apiKey, model, msg);
-    case "gemini": return callGemini(apiKey, model, msg);
     default: throw new Error(`Unknown provider: ${provider}`);
   }
 }

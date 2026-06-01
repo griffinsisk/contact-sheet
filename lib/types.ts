@@ -1,6 +1,6 @@
 // ── Provider types ──────────────────────────────────────────────────────────
 
-export type Provider = "anthropic" | "openai" | "gemini";
+export type Provider = "anthropic";
 
 export interface ProviderConfig {
   provider: Provider;
@@ -20,29 +20,9 @@ export const PROVIDER_INFO: Record<Provider, {
     keyUrl: "https://console.anthropic.com/settings/keys",
     keyHelp: "Get your API key from the Anthropic Console → Settings → API Keys",
     models: [
-      { id: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
+      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     placeholder: "sk-ant-api03-…",
-  },
-  openai: {
-    label: "OpenAI (GPT-4o)",
-    keyUrl: "https://platform.openai.com/api-keys",
-    keyHelp: "Get your API key from OpenAI Platform → API Keys",
-    models: [
-      { id: "gpt-4o", label: "GPT-4o" },
-      { id: "gpt-4o-mini", label: "GPT-4o Mini (cheaper)" },
-    ],
-    placeholder: "sk-proj-…",
-  },
-  gemini: {
-    label: "Google (Gemini)",
-    keyUrl: "https://aistudio.google.com/app/apikey",
-    keyHelp: "Get your API key from Google AI Studio → Get API Key",
-    models: [
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-    ],
-    placeholder: "AIza…",
   },
 };
 
