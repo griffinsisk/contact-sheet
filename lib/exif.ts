@@ -39,6 +39,7 @@ function parseExifSegment(view: DataView, start: number, length: number): ExifDa
   };
 
   const result: ExifData = {};
+  let subsecOriginal: string | undefined;
 
   const readIFD = (ifdOffset: number, isExifSub: boolean) => {
     if (ifdOffset + 2 > length) return;
@@ -75,6 +76,8 @@ function parseExifSegment(view: DataView, start: number, length: number): ExifDa
           break;
         case 0xA405: result.focalLength35 = type === 3 ? g16(valOff) : g32(valOff); break;
         case 0x9209: result.flash = g16(valOff); break;
+        case 0x9003: result.capturedAt = readStr(dataOff ?? valOff, Math.min(cnt, 32)) || undefined; break;
+        case 0x9291: subsecOriginal = readStr(dataOff ?? valOff, Math.min(cnt, 8)) || undefined; break;
         case 0x8769: if (!isExifSub) readIFD(g32(valOff), true); break;
       }
     }
@@ -86,7 +89,25 @@ function parseExifSegment(view: DataView, start: number, length: number): ExifDa
     result.model = result.model.substring(result.make.length).trim();
   }
 
+  const capturedAtMs = parseExifTimestamp(result.capturedAt, subsecOriginal);
+  if (capturedAtMs !== undefined) result.capturedAtMs = capturedAtMs;
+
   return Object.keys(result).length > 0 ? result : null;
+}
+
+/**
+ * Parse EXIF DateTimeOriginal ("YYYY:MM:DD HH:MM:SS") plus optional
+ * SubSecTimeOriginal into epoch ms. Local time is fine — burst detection
+ * only cares about gaps between frames from the same camera.
+ */
+export function parseExifTimestamp(dateTime?: string, subsec?: string): number | undefined {
+  if (!dateTime) return undefined;
+  const m = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(dateTime.trim());
+  if (!m) return undefined;
+  const ms = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
+  if (!Number.isFinite(ms)) return undefined;
+  const frac = subsec ? Number.parseFloat(`0.${subsec.trim()}`) : 0;
+  return ms + Math.round((Number.isFinite(frac) ? frac : 0) * 1000);
 }
 
 export function formatExifLine(exif: ExifData | null): string | null {

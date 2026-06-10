@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/nextjs";
 import {
   Photo, ProviderConfig, CullResult, DeepResult, Rating,
@@ -15,6 +15,8 @@ import { loadSessionIntent, saveSessionIntent } from "@/lib/session-intent";
 import { isE2EMockPro } from "@/lib/e2e";
 import { CULL_BATCH_SIZE, DEEP_BATCH_SIZE } from "@/lib/constants";
 import { resolveTier, canProcessPhotos, incrementFreeUsage, getFreeUsage } from "@/lib/tier";
+import { clusterPhotos } from "@/lib/clusters";
+import { ratingRank } from "@/lib/scoring";
 import { runHarness, computeHarnessSummary, downloadHarnessReport } from "@/lib/harness";
 import { resizeImage, makeThumb } from "@/lib/resize";
 import { isRawFile, isHeicFile } from "@/lib/raw-preview";
@@ -27,7 +29,7 @@ import Header from "./Header";
 import Sidebar from "./Sidebar";
 import EmptyState from "./EmptyState";
 import ProviderSetup from "./ProviderSetup";
-import PhotoGrid from "./PhotoGrid";
+import PhotoGrid, { BurstBadge } from "./PhotoGrid";
 import DetailPanel from "./DetailPanel";
 import CullBanner from "./CullBanner";
 import CullProgress from "./CullProgress";
@@ -146,6 +148,9 @@ export default function ContactSheet() {
   const processingFiles = useRef(false);
   const [sortBy, setSortBy] = useState<"default" | "score-desc" | "score-asc">("default");
   const [filterRating, setFilterRating] = useState<Rating | "ALL">("ALL");
+  // Burst clusters: expanded cluster ids; null targetCount = no delivery cap
+  const [expandedBursts, setExpandedBursts] = useState<Set<number>>(new Set());
+  const [targetCount, setTargetCount] = useState<number | null>(null);
   const [progressMsg, setProgressMsg] = useState("");
   const [progressPct, setProgressPct] = useState(0);
   const [progressDone, setProgressDone] = useState(0);
@@ -156,6 +161,13 @@ export default function ContactSheet() {
   const [sessions, setSessions] = useState<SessionSummary[]>(() => loadSessionIndex());
   const sessionIdRef = useRef(crypto.randomUUID());
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Burst / near-duplicate clusters (deterministic, client-side) ─────────
+
+  const clusters = useMemo(
+    () => clusterPhotos(photos.map(p => ({ dhash: p.dhash, capturedAtMs: p.exif?.capturedAtMs }))),
+    [photos],
+  );
 
   // ── Prevent browser from opening dropped files ──────────────────────────
 
@@ -279,6 +291,8 @@ export default function ContactSheet() {
     setDeepResults({});
     setCuratorialNotes(null);
     setRecommendedSequence(null);
+    setExpandedBursts(new Set());
+    setTargetCount(null);
 
     // Auto-regen taste profile if drift threshold + throttle allow (fire-and-forget).
     maybeAutoRegenProfile();
@@ -303,10 +317,24 @@ export default function ContactSheet() {
       setCullResults(results);
       if (tier === "free") incrementFreeUsage(target.length);
 
-      // Auto-select HERO + SELECT for shortlist development
+      // Burst alternates: within each cluster only the top-scoring frame
+      // auto-advances — shooting 10 near-identical frames shouldn't put
+      // 10 frames on the shortlist.
+      const burstAlternates = new Set<number>();
+      clusters.forEach((members) => {
+        let lead: number | null = null;
+        for (const i of members) {
+          if (!results[i]) continue;
+          if (lead === null || results[i].score > results[lead].score) lead = i;
+        }
+        if (lead === null) return;
+        members.forEach(i => { if (i !== lead && results[i]) burstAlternates.add(i); });
+      });
+
+      // Auto-select HERO + SELECT burst leads for shortlist development
       const autoSelected = new Set<number>();
       Object.entries(results).forEach(([idx, r]) => {
-        if (r.rating === "HERO" || r.rating === "SELECT") {
+        if ((r.rating === "HERO" || r.rating === "SELECT") && !burstAlternates.has(Number(idx))) {
           autoSelected.add(Number(idx));
         }
       });
@@ -322,7 +350,7 @@ export default function ContactSheet() {
       setPhase(Object.keys(cullResults).length > 0 ? "culled" : "empty");
       setProgressMsg("");
     }
-  }, [config, photos, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, tasteLibrary.entries, ignoreTasteProfile, maybeAutoRegenProfile]);
+  }, [config, photos, clusters, isPro, intentPreset, intentFreeForm, tasteLibrary.currentProfile, tasteLibrary.entries, ignoreTasteProfile, maybeAutoRegenProfile]);
 
   // ── Shortlist development ───────────────────────────────────────────────
 
@@ -451,6 +479,7 @@ export default function ContactSheet() {
       selectCount,
       level,
       hasDeepReview: hasDeep,
+      overrideCount: Object.keys(ratingOverrides).length,
       cullResults: cull,
       deepResults: deep,
       curatorialNotes: notes,
@@ -464,7 +493,7 @@ export default function ContactSheet() {
       })),
     });
     setSessions(loadSessionIndex());
-  }, [level]);
+  }, [level, ratingOverrides]);
 
   const handleRestoreSession = useCallback((id: string) => {
     const data = loadSession(id);
@@ -488,6 +517,8 @@ export default function ContactSheet() {
     setCuratorialNotes(data.curatorialNotes);
     setRecommendedSequence(data.recommendedSequence);
     setLevel(data.level);
+    setExpandedBursts(new Set());
+    setTargetCount(null);
     sessionIdRef.current = id;
 
     const autoSelected = new Set<number>();
@@ -675,8 +706,60 @@ export default function ContactSheet() {
     return 0;
   };
 
+  // ── Burst leads & alternates (cull scores pick the lead; overrides win) ──
+
+  const hasCullScores = Object.keys(cullResults).length > 0;
+  const burstLeadByCluster: Record<number, number> = {};
+  const burstAlts = new Set<number>();
+  const clusterOf: Record<number, number> = {};
+  if (hasCullScores) {
+    clusters.forEach((members, ci) => {
+      let lead = members[0];
+      for (const i of members) {
+        const ri = getEffectiveRating(i);
+        const rl = getEffectiveRating(lead);
+        const rankI = ri ? ratingRank(ri) : -1;
+        const rankL = rl ? ratingRank(rl) : -1;
+        if (rankI > rankL || (rankI === rankL && getScore(i) > getScore(lead))) lead = i;
+      }
+      burstLeadByCluster[ci] = lead;
+      members.forEach(i => {
+        clusterOf[i] = ci;
+        if (i !== lead) burstAlts.add(i);
+      });
+    });
+  }
+
+  const toggleBurst = (clusterId: number) => {
+    setExpandedBursts(prev => {
+      const next = new Set(prev);
+      if (next.has(clusterId)) next.delete(clusterId);
+      else next.add(clusterId);
+      return next;
+    });
+  };
+
+  // Bursts collapse only in the unfiltered view — rating filters and the
+  // delivery view show flat lists so counts stay honest.
+  const collapseBursts = hasCullScores && filterRating === "ALL" && targetCount === null;
+
+  const byEffectiveRank = (a: number, b: number) => {
+    const ra = getEffectiveRating(a);
+    const rb = getEffectiveRating(b);
+    const rankDiff = (rb ? ratingRank(rb) : -1) - (ra ? ratingRank(ra) : -1);
+    return rankDiff !== 0 ? rankDiff : getScore(b) - getScore(a);
+  };
+
   const displayIndices = (() => {
     let indices = photos.map((_, i) => i);
+
+    // Delivery view: the best N frames, one per burst, ranked
+    if (targetCount !== null && hasCullScores) {
+      return indices
+        .filter(i => !burstAlts.has(i))
+        .sort(byEffectiveRank)
+        .slice(0, targetCount);
+    }
 
     // Filter
     if (filterRating !== "ALL") {
@@ -690,8 +773,43 @@ export default function ContactSheet() {
       indices.sort((a, b) => getScore(a) - getScore(b));
     }
 
+    // Collapse bursts behind their lead; expanded clusters show alternates
+    // grouped right after the lead regardless of sort
+    if (collapseBursts) {
+      const result: number[] = [];
+      for (const i of indices) {
+        if (burstAlts.has(i)) continue;
+        result.push(i);
+        const ci = clusterOf[i];
+        if (ci !== undefined && expandedBursts.has(ci)) {
+          clusters[ci].forEach(m => { if (m !== i) result.push(m); });
+        }
+      }
+      return result;
+    }
+
     return indices;
   })();
+
+  // Burst chips for the grid (lead frames only, collapsed view only)
+  const burstBadges: Record<number, BurstBadge> = {};
+  if (collapseBursts) {
+    clusters.forEach((members, ci) => {
+      burstBadges[burstLeadByCluster[ci]] = {
+        count: members.length,
+        expanded: expandedBursts.has(ci),
+        clusterId: ci,
+      };
+    });
+  }
+
+  // ── AI agreement — the taste-loop health metric ─────────────────────────
+
+  const scoredCount = Object.keys(cullResults).length;
+  const correctionCount = Object.keys(ratingOverrides).length;
+  const agreementPct = scoredCount > 0
+    ? Math.round(((scoredCount - correctionCount) / scoredCount) * 100)
+    : null;
 
   // ── Render ──────────────────────────────────────────────────────────────
 
@@ -921,6 +1039,17 @@ export default function ContactSheet() {
                   <span className="text-secondary font-bold">{selectCount}</span>
                 </div>
               )}
+              {agreementPct !== null && (
+                <div
+                  className="flex items-center gap-2 font-label text-[10px] uppercase tracking-widest bg-surface-highest px-3 py-2 border-l-2 border-outline-variant"
+                  title={`You kept ${scoredCount - correctionCount} of ${scoredCount} AI ratings this session — corrections train your taste profile`}
+                >
+                  <span className="text-on-surface-variant">AI agreement:</span>
+                  <span className={`font-bold ${agreementPct >= 90 ? "text-secondary" : "text-primary"}`}>
+                    {agreementPct}%
+                  </span>
+                </div>
+              )}
               {compareSelected.length === 2 && !isRestoredSession && (
                 <button
                   onClick={startCompare}
@@ -937,9 +1066,9 @@ export default function ContactSheet() {
               {(["ALL", "HERO", "SELECT", "MAYBE", "CUT"] as const).map((r) => (
                 <button
                   key={r}
-                  onClick={() => setFilterRating(r)}
+                  onClick={() => { setFilterRating(r); setTargetCount(null); }}
                   className={`font-label text-[10px] px-2 py-1 uppercase tracking-widest transition-colors ${
-                    filterRating === r
+                    filterRating === r && targetCount === null
                       ? r === "ALL" ? "bg-surface-highest text-on-surface" : r === "HERO" ? "bg-primary/20 text-primary" : r === "SELECT" ? "bg-secondary/20 text-secondary" : r === "CUT" ? "bg-error/20 text-error" : "bg-surface-highest text-on-surface-variant"
                       : "text-on-surface-variant/50 hover:text-on-surface-variant"
                   }`}
@@ -947,6 +1076,47 @@ export default function ContactSheet() {
                   {r}
                 </button>
               ))}
+
+              {/* Delivery target — the best N frames, one per burst */}
+              {hasCullScores && (
+                <>
+                  <span className="text-outline-variant mx-1">|</span>
+                  <button
+                    onClick={() => {
+                      if (targetCount === null) {
+                        setFilterRating("ALL");
+                        setTargetCount(Math.min(30, photos.length));
+                      } else {
+                        setTargetCount(null);
+                      }
+                    }}
+                    aria-pressed={targetCount !== null}
+                    title="Show only your best N frames — one per burst, ranked by rating and score"
+                    className={`flex items-center gap-1 font-label text-[10px] px-2 py-1 uppercase tracking-widest transition-colors ${
+                      targetCount !== null
+                        ? "bg-primary/20 text-primary"
+                        : "text-on-surface-variant/50 hover:text-on-surface-variant"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">workspace_premium</span>
+                    TOP
+                  </button>
+                  {targetCount !== null && (
+                    <input
+                      type="number"
+                      min={1}
+                      max={photos.length}
+                      value={targetCount}
+                      onChange={(e) => {
+                        const n = Number.parseInt(e.target.value, 10);
+                        if (Number.isFinite(n)) setTargetCount(Math.max(1, Math.min(photos.length, n)));
+                      }}
+                      aria-label="Delivery target count"
+                      className="w-14 bg-surface-high text-on-surface font-label text-[11px] px-2 py-1 border border-outline-variant text-center"
+                    />
+                  )}
+                </>
+              )}
 
               <span className="text-outline-variant mx-1">|</span>
 
@@ -1001,8 +1171,13 @@ export default function ContactSheet() {
                   {harnessRunning ? harnessProgress : "HARNESS"}
                 </button>
               )}
-              <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-tighter">
-                <span className="text-on-surface font-bold">{displayIndices.length}</span>{filterRating !== "ALL" ? `/${photos.length}` : ""} Photos
+              <div
+                className="font-label text-[10px] text-on-surface-variant uppercase tracking-tighter"
+                title={collapseBursts && displayIndices.length < photos.length
+                  ? `${photos.length - displayIndices.length} burst alternates are tucked behind their best frame`
+                  : undefined}
+              >
+                <span className="text-on-surface font-bold">{displayIndices.length}</span>{displayIndices.length !== photos.length ? `/${photos.length}` : ""} Photos
               </div>
               {tier === "free" && freeUsage && (
                 <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">
@@ -1019,6 +1194,7 @@ export default function ContactSheet() {
             deepCount={deepSelected.size}
             onStartDeepReview={startDeepReview}
             isRestored={isRestoredSession}
+            burstCount={clusters.length}
           />
         )}
 
@@ -1046,6 +1222,9 @@ export default function ContactSheet() {
             onCompareToggle={handleCompareToggle}
             onDeepToggle={handleDeepToggle}
             sequenceMap={sequenceMap}
+            burstBadges={burstBadges}
+            burstAlts={burstAlts}
+            onToggleBurst={toggleBurst}
           />
         )}
 

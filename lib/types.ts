@@ -39,6 +39,8 @@ export interface ExifData {
   focalLength?: number;
   focalLength35?: number;
   flash?: number;
+  capturedAt?: string;      // raw EXIF DateTimeOriginal, "YYYY:MM:DD HH:MM:SS"
+  capturedAtMs?: number;    // parsed epoch ms (local time), subseconds included
 }
 
 export interface Photo {
@@ -50,6 +52,7 @@ export interface Photo {
   height: number;
   mediaType: string;
   exif: ExifData | null;
+  dhash?: string;           // 64-bit perceptual hash for burst/dupe clustering
   isRestored?: boolean;
   originalFile?: File;      // retained for lossless export
 }
@@ -171,6 +174,7 @@ export interface SessionSummary {
   selectCount: number;
   level: ExperienceLevel;
   hasDeepReview: boolean;
+  overrideCount?: number;   // corrections made this session — taste-loop signal
 }
 
 export interface SessionData extends SessionSummary {

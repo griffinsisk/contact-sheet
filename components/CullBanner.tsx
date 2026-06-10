@@ -4,9 +4,10 @@ interface Props {
   deepCount: number;
   onStartDeepReview: () => void;
   isRestored?: boolean;
+  burstCount?: number;
 }
 
-export default function CullBanner({ deepCount, onStartDeepReview, isRestored }: Props) {
+export default function CullBanner({ deepCount, onStartDeepReview, isRestored, burstCount }: Props) {
   const photoLabel = `${deepCount} ${deepCount === 1 ? "photo" : "photos"}`;
 
   return (
@@ -21,6 +22,11 @@ export default function CullBanner({ deepCount, onStartDeepReview, isRestored }:
         <span className="font-label font-black uppercase tracking-widest text-on-primary text-sm">
           {isRestored ? "Restored session" : "Cull complete"}
         </span>
+        {!isRestored && (burstCount ?? 0) > 0 && (
+          <span className="font-label text-xs text-on-primary/70 uppercase tracking-widest">
+            · {burstCount} burst{burstCount === 1 ? "" : "s"} grouped — best frame leads each
+          </span>
+        )}
       </div>
       {isRestored ? (
         <span className="font-label text-xs text-on-primary/70 uppercase tracking-widest">
