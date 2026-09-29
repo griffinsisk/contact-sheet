@@ -1,6 +1,6 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { authkitProxy } from "@workos-inc/authkit-nextjs";
 
-export default clerkMiddleware();
+export default authkitProxy();
 
 export const config = {
   matcher: [

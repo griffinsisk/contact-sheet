@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { TasteEntry, generateTasteProfile, getTasteLibraryClient } from "@/lib/taste-library";
 import { computePhotoHash } from "@/lib/photo-hash";
 import { resizeImage } from "@/lib/resize";
@@ -58,8 +58,8 @@ export default function SeedUploadModal({ onClose, mode = "manage", allowMultipl
     setLastRegenAt,
     toggleFavorite,
   } = useTasteLibrary();
-  const { user } = useUser();
-  const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
+  const { user } = useAuth();
+  const isPro = isE2EMockPro() || (user as any)?.publicMetadata?.tier === "pro";
   const canManageMultipleProfiles = allowMultipleProfiles || isPro;
   const modalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

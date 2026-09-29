@@ -98,9 +98,11 @@ export async function POST(req: NextRequest) {
       images,
       textParts,
       maxTokens,
-      // Intent-aware prompt varies per cull — disable system-prompt cache so
-      // the cache doesn't lock in whichever intent was hit first.
-      cacheSystem: false,
+      // Anthropic's prompt cache is keyed by exact prefix content — each
+      // (intent, profile) variant gets its own entry, so there's no
+      // cross-intent contamination. Within one cull session every batch
+      // sends an identical system prompt, so batches 2..N read the cache.
+      cacheSystem: true,
     });
     return NextResponse.json(response);
   } catch (err: any) {

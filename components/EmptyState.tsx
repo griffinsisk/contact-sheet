@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { ExperienceLevel, SessionSummary } from "@/lib/types";
 import { isE2EMockPro } from "@/lib/e2e";
 import { isRawFile } from "@/lib/raw-preview";
@@ -27,8 +27,8 @@ export default function EmptyState({
   onOpenSettings,
   allowMultipleProfiles = false,
 }: Props) {
-  const { user } = useUser();
-  const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
+  const { user, refreshAuth } = useAuth();
+  const isPro = isE2EMockPro() || (user as any)?.publicMetadata?.tier === "pro";
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
   const [seedModalMode, setSeedModalMode] = useState<"manage" | "view">("manage");
@@ -190,25 +190,21 @@ export default function EmptyState({
             </div>
             {isPro ? (
               <div className={`${ctaBase} mt-6 bg-surface-high text-on-surface-variant text-center`}>You're Pro</div>
+            ) : !user ? (
+              <button
+                onClick={() => void refreshAuth({ ensureSignedIn: true })}
+                className={`${ctaBase} mt-6 bg-surface-high text-on-surface hover:bg-surface-bright`}
+              >
+                Upgrade to Pro
+              </button>
             ) : (
-              <>
-                <SignedOut>
-                  <SignInButton mode="modal">
-                    <button className={`${ctaBase} mt-6 bg-surface-high text-on-surface hover:bg-surface-bright`}>
-                      Upgrade to Pro
-                    </button>
-                  </SignInButton>
-                </SignedOut>
-                <SignedIn>
-                  <button
-                    onClick={startCheckout}
-                    disabled={upgradeLoading}
-                    className={`${ctaBase} mt-6 bg-surface-high text-on-surface hover:bg-surface-bright`}
-                  >
-                    {upgradeLoading ? "Loading…" : "Upgrade to Pro"}
-                  </button>
-                </SignedIn>
-              </>
+              <button
+                onClick={startCheckout}
+                disabled={upgradeLoading}
+                className={`${ctaBase} mt-6 bg-surface-high text-on-surface hover:bg-surface-bright`}
+              >
+                {upgradeLoading ? "Loading…" : "Upgrade to Pro"}
+              </button>
             )}
           </div>
 

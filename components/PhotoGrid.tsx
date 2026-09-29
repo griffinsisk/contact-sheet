@@ -6,6 +6,12 @@ import TasteStarButton from "./TasteStarButton";
 
 type Phase = "empty" | "uploading" | "ready" | "culling" | "culled" | "reviewing" | "reviewed";
 
+export interface BurstBadge {
+  count: number;
+  expanded: boolean;
+  clusterId: number;
+}
+
 interface Props {
   photos: Photo[];
   cullResults: Record<number, CullResult>;
@@ -20,6 +26,9 @@ interface Props {
   onCompareToggle: (index: number) => void;
   onDeepToggle: (index: number) => void;
   sequenceMap: Record<number, number>;
+  burstBadges?: Record<number, BurstBadge>;
+  burstAlts?: Set<number>;
+  onToggleBurst?: (clusterId: number) => void;
 }
 
 const RATING_CLASSES: Record<Rating, { badge: string; scoreBorder: string }> = {
@@ -44,6 +53,7 @@ const RATING_CLASSES: Record<Rating, { badge: string; scoreBorder: string }> = {
 export default function PhotoGrid({
   photos, cullResults, deepResults, deepSelected, compareSelected,
   selectedIndex, phase, ratingOverrides, displayIndices, onSelect, onCompareToggle, onDeepToggle, sequenceMap,
+  burstBadges, burstAlts, onToggleBurst,
 }: Props) {
   return (
     <div className="p-8 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -62,6 +72,8 @@ export default function PhotoGrid({
         const isCut = rating === "CUT" || rating === "MAYBE";
         const seqNum = sequenceMap[index];
         const exifLine = formatExifLine(photo.exif);
+        const burst = burstBadges?.[index];
+        const isBurstAlt = burstAlts?.has(index) ?? false;
 
         return (
           <div
@@ -77,6 +89,10 @@ export default function PhotoGrid({
               className={`relative aspect-square bg-surface-lowest overflow-hidden cursor-pointer transition-all duration-200 ${
                 isSelected ? "outline outline-2 outline-primary" : isCompare ? "outline outline-2 outline-primary" : ""
               }`}
+              style={burst && !burst.expanded ? {
+                // Stacked-paper effect: the rest of the burst sits behind the lead
+                boxShadow: "6px 6px 0 -1px rgba(255,255,255,0.07), 12px 12px 0 -2px rgba(255,255,255,0.035)",
+              } : undefined}
             >
               <img
                 src={photo.preview}
@@ -186,9 +202,36 @@ export default function PhotoGrid({
               )}
             </div>
 
+            {/* Burst chip — lead frame of a collapsed/expanded burst */}
+            {burst && onToggleBurst && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleBurst(burst.clusterId); }}
+                aria-expanded={burst.expanded}
+                aria-label={`${burst.expanded ? "Collapse" : "Expand"} burst of ${burst.count} similar frames led by ${photo.name}`}
+                className={`self-start flex items-center gap-1.5 px-2 py-1 font-label text-[9px] font-bold uppercase tracking-widest transition-colors ${
+                  burst.expanded
+                    ? "bg-primary/20 text-primary"
+                    : "bg-surface-high text-on-surface-variant hover:bg-surface-bright hover:text-on-surface"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[13px]">burst_mode</span>
+                BEST OF {burst.count}
+                <span className="material-symbols-outlined text-[13px]">
+                  {burst.expanded ? "unfold_less" : "unfold_more"}
+                </span>
+              </button>
+            )}
+
             {/* Filename + EXIF below thumbnail */}
             <div className="font-label text-[9px] uppercase tracking-widest text-on-surface/40 flex justify-between">
-              <span className="truncate">{photo.name}</span>
+              <span className="truncate flex items-center gap-1.5">
+                {isBurstAlt && (
+                  <span className="flex-shrink-0 px-1 py-px bg-surface-high text-on-surface-variant font-bold" title="Alternate frame from a burst">
+                    ALT
+                  </span>
+                )}
+                <span className="truncate">{photo.name}</span>
+              </span>
               {exifLine && <span className="flex-shrink-0 ml-2">{exifLine}</span>}
             </div>
           </div>

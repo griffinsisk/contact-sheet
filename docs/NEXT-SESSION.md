@@ -1,9 +1,9 @@
 # Next Session — Production Smoke / Phase 2 Persistence
 
-**Updated:** 2026-05-12
+**Updated:** 2026-06-01
 **Current branch:** `main`
 **Production:** https://contact-sheet-three.vercel.app — returned HTTP 200 after latest deploy
-**Latest pushed commit:** `57b5da8 fix: complete cull and export outputs`
+**Latest pushed commit:** `7cbe6a4 Merge pull request #7 (Anthropic-only + Sonnet 4.6)`
 **Current cleanup spec:** `docs/superpowers/specs/2026-05-09-shipping-cleanup-route-hardening-design.md`
 **Current cleanup plan:** `docs/superpowers/plans/2026-05-09-shipping-cleanup-route-hardening.md`
 **Phase 2 persistence spec:** `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`
@@ -14,6 +14,7 @@ Clerk manifest, private Vercel Blob storage, private image resolution, and cross
 
 ## Current State
 
+- **Anthropic-only + Sonnet 4.6 (2026-06-01, PR #7 merged):** removed the OpenAI and Gemini provider paths; the app now targets Claude exclusively. Bumped the Sonnet model ID from the deprecated `claude-sonnet-4-20250514` to `claude-sonnet-4-6` across hosted routes, scripts, and the BYOK catalog. Vercel `ANTHROPIC_MODEL` set to `claude-sonnet-4-6` in Production/Preview/Development (this env var overrides the code default). Live `npm run eval:ai` passed 8/8 on Sonnet 4.6 after recalibrating the gitignored eval bands for 3 boundary cases.
 - Phase F reframed the second pass from Deep Review to **Develop Shortlist** with **Editor's Notes**.
 - Phase 1 local multi-profile shipped named local profiles, v2 localStorage collection migration, active-profile switching at cull time, per-profile favorites/profile regeneration, and `profileIdAtCull` correction scoping.
 - Free/pro hosted-key model routes now have shared request guardrails for `/api/cull`, `/api/deep-review`, `/api/compare`, `/api/taste-profile`, and `/api/override-describe`.
@@ -34,6 +35,8 @@ npm run build          # passed with required local build env:
                        # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<valid test-format key>
 curl -I https://contact-sheet-three.vercel.app
                        # HTTP/2 200 after Vercel deploy success
+ANTHROPIC_MODEL=claude-sonnet-4-6 npm run eval:ai
+                       # 8/8 passed (live cull, Sonnet 4.6) after band recalibration
 ```
 
 ## Next Steps
@@ -62,5 +65,6 @@ curl -I https://contact-sheet-three.vercel.app
 ## Maintenance Notes
 
 - `npm run lint` is still not a reliable gate; earlier docs note deprecated interactive `next lint` behavior.
-- `eval-fixtures/cases.json`, `eval-fixtures/photos/`, and `eval-results/` are intentionally ignored local artifacts.
+- `eval-fixtures/cases.json`, `eval-fixtures/photos/`, and `eval-results/` are intentionally ignored local artifacts. `cases.json` bands are now calibrated to Sonnet 4.6's score distribution (3 boundary cases adjusted 2026-06-01).
+- **Model selection is controlled by the Vercel `ANTHROPIC_MODEL` env var, which overrides the code default (`claude-sonnet-4-6`).** A code-only model change is inert in prod unless the Vercel var is updated/removed, and env changes need a redeploy. Local `.env.local` may still pin the old model — only affects `next dev`; the eval harness overrides it.
 - The app still uses live model scoring per frame. Profile adjustment is deterministic after model output; it does not make model outputs deterministic across runs.

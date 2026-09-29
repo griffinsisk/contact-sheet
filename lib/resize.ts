@@ -1,5 +1,6 @@
 import { Photo } from "./types";
 import { readEXIF } from "./exif";
+import { computeDHash } from "./clusters";
 import { isRawFile, isRawByMagic, extractJpegPreview } from "./raw-preview";
 
 /**
@@ -59,6 +60,7 @@ export function resizeImage(file: File, maxDim = 2048): Promise<Photo> {
         canvas.width = w;
         canvas.height = h;
         canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+        const dhash = computeDHash(img);
         URL.revokeObjectURL(imgSrc);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
         resolve({
@@ -70,6 +72,7 @@ export function resizeImage(file: File, maxDim = 2048): Promise<Photo> {
           height: Math.round(h),
           mediaType: "image/jpeg",
           exif,
+          dhash,
           originalFile: file,
         });
       };

@@ -106,7 +106,10 @@ export async function POST(req: NextRequest) {
       images,
       textParts,
       maxTokens,
-      cacheSystem: false,
+      // Cache is keyed by exact prompt content — every (intent, profile,
+      // voice) variant is its own entry, and batches within one shortlist
+      // development run share the same prompt.
+      cacheSystem: true,
     });
     return NextResponse.json(response);
   } catch (err: any) {
