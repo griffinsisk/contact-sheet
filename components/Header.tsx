@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
+import { signOutAction } from "@/app/auth/actions";
 import { useTasteLibrary } from "@/hooks/useTasteLibrary";
 import UpgradeButton from "./UpgradeButton";
 import SeedUploadModal from "./SeedUploadModal";
@@ -15,6 +16,7 @@ interface Props {
 
 export default function Header({ onHistory, onSettings, onAddFiles, allowMultipleProfiles = false }: Props) {
   const [showSeedModal, setShowSeedModal] = useState(false);
+  const { user, loading, refreshAuth } = useAuth();
   const { library, collection } = useTasteLibrary();
   const profileTitle = library.currentProfile
     ? `Taste profile: ${library.name}`
@@ -69,16 +71,29 @@ export default function Header({ onHistory, onSettings, onAddFiles, allowMultipl
           <span className="material-symbols-outlined">settings</span>
         </button>
         <UpgradeButton />
-        <SignedOut>
-          <SignInButton mode="modal">
-            <button className="bg-surface-high px-4 py-2 hover:bg-surface-bright transition-colors duration-200 mono-label text-[10px] uppercase tracking-widest font-bold">
-              Sign In
-            </button>
-          </SignInButton>
-        </SignedOut>
-        <SignedIn>
-          <UserButton />
-        </SignedIn>
+        {!loading && !user && (
+          <button
+            onClick={() => void refreshAuth({ ensureSignedIn: true })}
+            className="bg-surface-high px-4 py-2 hover:bg-surface-bright transition-colors duration-200 mono-label text-[10px] uppercase tracking-widest font-bold"
+          >
+            Sign In
+          </button>
+        )}
+        {!loading && user && (
+          <div className="flex items-center gap-3">
+            <span className="mono-label text-[10px] text-on-surface-variant">
+              {user.email}
+            </span>
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="text-on-surface-variant hover:text-on-surface transition-colors duration-200 mono-label text-[10px] uppercase tracking-widest"
+              >
+                Sign Out
+              </button>
+            </form>
+          </div>
+        )}
       </div>
       {showSeedModal && (
         <SeedUploadModal

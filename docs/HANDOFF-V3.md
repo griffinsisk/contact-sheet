@@ -4,7 +4,7 @@
 
 Contact Sheet is an AI-powered photo culling and analysis tool for photographers. Upload hundreds of photos straight from your camera, get them sorted into keepers and cuts in seconds, then go deep on your best frames with full editorial critique.
 
-This is a **portfolio project** targeting a Solutions Architect, Applied AI (Creatives) role at Anthropic. It should demonstrate: multi-provider Vision API integration, structured outputs, polished creative-tool UX, and a real photographer's workflow understanding.
+This is a **portfolio project** targeting a Solutions Architect, Applied AI (Creatives) role at Anthropic. It should demonstrate: deep Claude Vision integration, structured outputs, polished creative-tool UX, and a real photographer's workflow understanding.
 
 ## Current State
 
@@ -12,7 +12,11 @@ The Next.js app is built and live in production at https://contact-sheet-three.v
 
 Phase F reframed the second pass from Deep Review to **Develop Shortlist** with **Editor's Notes** output. Phase 1 local multi-profile taste profiles is merged on `main`: local v2 taste-library collections, named profiles, active-profile switching at cull time, per-profile favorites/profile regeneration, and profile-scoped corrections.
 
-The cleanup/security pass added shared request guardrails for hosted-key routes. The latest closeout fix also made cull completion resilient to omitted model indices and changed folder export to create one contained delivery package with photo + `.xmp` pairs. The next product phase is persistent Pro taste profiles: Clerk manifest, private Vercel Blob collection storage, private image upload/resolve/delete routes, and local-to-server migration. This is documented in `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`.
+The cleanup/security pass added shared request guardrails for hosted-key routes. The latest closeout fix also made cull completion resilient to omitted model indices and changed folder export to create one contained delivery package with photo + `.xmp` pairs.
+
+**Anthropic-only migration (2026-06-01, PR #7 merged to `main`):** The OpenAI and Gemini provider paths were removed — the app now targets Claude exclusively. The Sonnet model ID was updated from the deprecated `claude-sonnet-4-20250514` to `claude-sonnet-4-6` across the hosted routes, scripts, and the BYOK catalog. The model is selected via `process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6"`; the **Vercel env var `ANTHROPIC_MODEL` overrides the code default** and is set to `claude-sonnet-4-6` across Production/Preview/Development. Live `npm run eval:ai` over the fixture set passed 8/8 on Sonnet 4.6 after recalibrating the (gitignored) eval bands.
+
+The next product phase is persistent Pro taste profiles: Clerk manifest, private Vercel Blob collection storage, private image upload/resolve/delete routes, and local-to-server migration. This is documented in `docs/superpowers/specs/2026-05-05-persistent-multi-profile-design.md`.
 
 ## Architecture — Two-Pass Cull/Develop Shortlist
 
@@ -39,34 +43,34 @@ This is the core design decision. Photographers dump hundreds of photos and want
 - Total: under $0.20 for a full session vs $1-2 if every photo got the full treatment
 - Users can skip Develop Shortlist entirely if they just need the sort
 
-## Multi-Provider BYOK
+## BYOK (Bring Your Own Key)
 
-Users can bring their own API key. This mode needs no server-side key or billing infrastructure.
+Users can bring their own Anthropic API key. This mode needs no server-side key or billing infrastructure.
 
 The shipped app also has hosted-key Free/Pro routes for users who do not bring their own key. Those routes are guarded by the shared cleanup/security pass; BYOK remains the direct-provider path.
 
-### Supported Providers
+### Provider
 
-| Provider | Models | Auth | Image Format |
-|----------|--------|------|-------------|
-| **Anthropic** | Claude Sonnet 4 | `x-api-key` header + `anthropic-version` header + `anthropic-dangerous-direct-browser-access` header | `{ type: "image", source: { type: "base64", media_type, data } }` |
-| **OpenAI** | GPT-4o, GPT-4o Mini | `Authorization: Bearer` header | `{ type: "image_url", image_url: { url: "data:mime;base64,..." } }` |
-| **Google Gemini** | Gemini 2.5 Flash, Gemini 2.5 Pro | API key as query param | `{ inlineData: { mimeType, data } }` |
+The app is **Anthropic-only** as of 2026-06-01 (OpenAI and Gemini were removed — see Current State).
 
-### Provider Adapter Pattern
+| Provider | Model | Auth | Image Format |
+|----------|-------|------|-------------|
+| **Anthropic** | Claude Sonnet 4.6 (`claude-sonnet-4-6`) | `x-api-key` header + `anthropic-version` header + `anthropic-dangerous-direct-browser-access` header (browser/BYOK only) | `{ type: "image", source: { type: "base64", media_type, data } }` |
 
-`lib/providers.ts` has a unified `callProvider()` function that takes a provider name, API key, model, and a message object, then formats the request correctly for each provider. The prompts are model-agnostic — only the request/response shape changes.
+The override-description helper route uses `claude-haiku-4-5-20251001`.
+
+### Provider Adapter
+
+`lib/providers.ts` exposes a `callProvider()` function (provider, API key, model, message object) that builds the Anthropic Messages request. The `Provider` type is now the single member `"anthropic"`; the `switch` is kept as a seam for adding Claude-specific behavior (batch API, extended thinking) later. The `cacheSystem` flag wraps the system prompt in an ephemeral prompt-cache block on the server-side path.
 
 BYOK API calls go **directly from the browser to the provider** — no server proxy needed. Keys live in localStorage, never touch any server.
 
 ### Onboarding Flow
 
-`components/ProviderSetup.tsx` is a clean setup screen:
-1. Pick provider (3 cards: Anthropic, OpenAI, Google)
-2. Pick model (if provider has multiple)
-3. Enter API key (with show/hide toggle, format validation)
-4. Direct link to each provider's API key page
-5. Security note: "stored locally, sent directly to provider, never to our servers"
+`components/ProviderSetup.tsx` is a clean setup screen (Anthropic-only — the picker renders a single card):
+1. Enter API key (with show/hide toggle, `sk-ant-` format validation)
+2. Direct link to the Anthropic Console API-keys page
+3. Security note: "stored locally, sent directly to provider, never to our servers"
 
 ## EXIF Extraction
 
@@ -179,7 +183,7 @@ contact-sheet/
 │   └── ProviderSetup.tsx       # BYOK onboarding — provider selection, key input
 ├── lib/
 │   ├── types.ts                # TypeScript interfaces and provider info config
-│   ├── providers.ts            # Multi-provider adapter (Anthropic, OpenAI, Gemini)
+│   ├── providers.ts            # Anthropic Messages adapter (callProvider) + JSON repair
 │   ├── api.ts                  # Cull, develop shortlist, compare orchestration
 │   ├── prompts.ts              # System prompts + experience voice modifiers
 │   ├── exif.ts                 # EXIF parser + formatters
@@ -260,6 +264,7 @@ BYOK works with user-supplied browser keys. Hosted Free/Pro model routes require
 - Build command: `next build`
 - Output directory: `.next`
 - Serverless API routes handle hosted-key cull, develop shortlist, compare, taste-profile, and override-description calls
+- **`ANTHROPIC_MODEL`** env var (Production/Preview/Development) selects the model and overrides the code default — currently `claude-sonnet-4-6`. Changing the model in code alone is inert in prod unless this var is updated or removed. Env-var changes only take effect on a redeploy.
 
 ## Session Persistence
 
@@ -275,7 +280,7 @@ Restored sessions show scores and thumbnails but can't re-analyze or compare wit
 
 1. **Cull accuracy**: Upload 20+ diverse photos, verify scores span the full range and don't cluster
 2. **EXIF extraction**: Test with photos from different cameras — DSLR, mirrorless, phone
-3. **Multi-provider parity**: Same photos through Anthropic, OpenAI, Gemini — scores should be roughly comparable
+3. **Cull calibration on Sonnet 4.6**: `npm run eval:ai` over the fixture set should pass; watch boundary cases when changing model or prompts (eval bands are calibrated to 4.6's score distribution)
 4. **Large batches**: 50+ photos — verify batching works, progress shows, no timeouts
 5. **Develop Shortlist quality**: Verify Editor's Notes, role, edit direction, sequencing, and Pro/Learning voice
 6. **Export integrity**: XMP files should load in Lightroom, org scripts should run without errors

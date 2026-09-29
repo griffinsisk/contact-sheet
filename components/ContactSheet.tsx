@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import {
   Photo, ProviderConfig, CullResult, DeepResult, Rating,
   ExperienceLevel, CompareResponse, SessionSummary, IntentPreset,
@@ -41,9 +41,9 @@ import SessionsModal from "./SessionsModal";
 type Phase = "empty" | "uploading" | "ready" | "culling" | "culled" | "reviewing" | "reviewed";
 
 export default function ContactSheet() {
-  // Clerk — publicMetadata.tier is set by Stripe webhook
-  const { user } = useUser();
-  const isPro = isE2EMockPro() || user?.publicMetadata?.tier === "pro";
+  // WorkOS AuthKit — publicMetadata.tier is set by Stripe webhook
+  const { user } = useAuth();
+  const isPro = isE2EMockPro() || (user as any)?.publicMetadata?.tier === "pro";
 
   // Taste library (Pro-only profile injection — soft bias under intent)
   const {

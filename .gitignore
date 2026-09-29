@@ -39,3 +39,4 @@ _personal/
 
 # clerk configuration (can include secrets)
 /.clerk/
+.env.local.bak
